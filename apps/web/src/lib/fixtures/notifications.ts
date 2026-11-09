@@ -1,0 +1,46 @@
+import { Notification } from '@edgi/contracts';
+
+export const mockNotifications: Notification[] = [
+  {
+    id: 'notif-001',
+    userId: '00000000-0000-0000-0000-000000000001',
+    type: 'priority_alert',
+    title: 'New 96% Match: OpenSSF AppSec Fellowship',
+    message: 'A new high-relevance fellowship matching your Cyber Security & AppSec skills was discovered and verified.',
+    link: '/opportunities/openssf-global-appsec-fellowship-2027',
+    read: false,
+    createdAt: '2026-11-09T20:15:00.000Z',
+  },
+  {
+    id: 'notif-002',
+    userId: '00000000-0000-0000-0000-000000000001',
+    type: 'deadline_reminder',
+    title: '14 Days Remaining: OpenSSF Fellowship Deadline',
+    message: 'Application deadline is November 23, 2026. Checklist is 50% complete.',
+    link: '/applications',
+    read: false,
+    createdAt: '2026-11-09T08:00:00.000Z',
+  },
+  {
+    id: 'notif-003',
+    userId: '00000000-0000-0000-0000-000000000001',
+    type: 'source_issue',
+    title: 'Source Outage Detected',
+    message: "Source 'DefSec Security Bounties Feed' failed health check with HTTP 502 Bad Gateway (7 consecutive attempts).",
+    link: '/sources',
+    read: true,
+    readAt: '2026-11-08T10:00:00.000Z',
+    createdAt: '2026-11-08T09:30:00.000Z',
+  },
+  {
+    id: 'notif-004',
+    userId: '00000000-0000-0000-0000-000000000001',
+    type: 'daily_digest',
+    title: 'Daily Opportunity Digest — Monday, Nov 9',
+    message: '3 new opportunities indexed, 1 candidate source recommended for approval.',
+    link: '/discover',
+    read: true,
+    readAt: '2026-11-09T09:12:00.000Z',
+    createdAt: '2026-11-09T07:00:00.000Z',
+  },
+];

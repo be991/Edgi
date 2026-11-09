@@ -1,0 +1,471 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// 1. Users & Auth Anchor
+// -----------------------------------------------------------------------------
+model User {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  email                  String                   @unique
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+
+  profile                UserProfile?
+  preferences            UserPreferences?
+  savedOpportunities     SavedOpportunity[]
+  applications           Application[]
+  applicationDocuments   ApplicationDocument[]
+  notifications          Notification[]
+  notificationPreferences NotificationPreference[]
+  opportunityMatches     OpportunityMatch[]
+
+  @@map("users")
+}
+
+// -----------------------------------------------------------------------------
+// 2. User Profile (Target persona: 200-level Cyber Security student)
+// -----------------------------------------------------------------------------
+model UserProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  fullName    String   @map("full_name")
+  headline    String
+  degree      String
+  major       String
+  yearOfStudy String   @map("year_of_study")
+  university  String
+  country     String
+  timezone    String   @default("Africa/Lagos")
+  bio         String   @db.Text
+  skills      Json     @default("[]") // string[]
+  targetRoles Json     @default("[]") @map("target_roles") // string[]
+  interests   Json     @default("[]") // string[]
+  links       Json     @default("{}") // { github, linkedin, portfolio, cvUrl }
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+// -----------------------------------------------------------------------------
+// 3. User Preferences (Thresholds, categories, notifications, budget)
+// -----------------------------------------------------------------------------
+model UserPreferences {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @map("user_id") @db.Uuid
+  targetCategories  String[] @default(["internship", "fellowship", "hackathon_ctf", "dev_programme", "oss_bounty", "funding"]) @map("target_categories")
+  minRelevanceScore Int      @default(60) @map("min_relevance_score")
+  notifyInApp       Boolean  @default(true) @map("notify_in_app")
+  notifyEmail       Boolean  @default(true) @map("notify_email")
+  digestFrequency   String   @default("daily") @map("digest_frequency")
+  digestTime        String   @default("08:00") @map("digest_time")
+  reminderDays      Int[]    @default([14, 7, 3, 1]) @map("reminder_days")
+  excludedKeywords  String[] @default([]) @map("excluded_keywords")
+  monthlyBudgetCap  Float    @default(10.0) @map("monthly_budget_cap")
+  searchBudgetCap   Float    @default(4.0) @map("search_budget_cap")
+  llmBudgetCap      Float    @default(5.0) @map("llm_budget_cap")
+  bufferBudgetCap   Float    @default(1.0) @map("buffer_budget_cap")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// -----------------------------------------------------------------------------
+// 4. Organizations (Publishers, fellowship hosts, companies, foundations)
+// -----------------------------------------------------------------------------
+model Organization {
+  id            String        @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String        @unique
+  website       String?
+  logoUrl       String?       @map("logo_url")
+  country       String?
+  description   String?       @db.Text
+  verified      Boolean       @default(false)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  sources       Source[]
+  opportunities Opportunity[]
+
+  @@index([name])
+  @@index([country])
+  @@map("organizations")
+}
+
+// -----------------------------------------------------------------------------
+// 5. Sources (Channels registered or discovered)
+// -----------------------------------------------------------------------------
+model Source {
+  id                   String               @id @default(uuid()) @db.Uuid
+  organizationId       String?              @map("organization_id") @db.Uuid
+  name                 String
+  slug                 String               @unique
+  connectorType        String               @map("connector_type") // website, rss_feed, github, etc.
+  url                  String
+  status               String               @default("active") // active, active_limited, manual_capture_only, unavailable
+  capabilities         Json                 @default("{}")
+  health               Json                 @default("{}")
+  config               Json                 @default("{}")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  organization         Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  discoveredContents   DiscoveredContent[]
+  opportunitySources   OpportunitySource[]
+  contentEvidences     ContentEvidence[]
+
+  @@index([connectorType])
+  @@index([status])
+  @@map("sources")
+}
+
+// -----------------------------------------------------------------------------
+// 6. Canonical Opportunities
+// -----------------------------------------------------------------------------
+model Opportunity {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  canonicalUrl         String                     @unique @map("canonical_url")
+  title                String
+  slug                 String
+  summary              String                     @db.Text
+  organizationId       String                     @map("organization_id") @db.Uuid
+  category             String                     // internship, fellowship, hackathon_ctf, etc.
+  verificationStatus   String                     @default("unverified") @map("verification_status") // unverified, verified, expired, etc.
+  confidence           Float                      @default(0.5)
+  publishedAt          DateTime?                  @map("published_at")
+  deadline             DateTime?                  // Null allowed! Never fabricate
+  deadlineTz           String?                    @map("deadline_tz")
+  isDeadlineEstimated  Boolean                    @default(false) @map("is_deadline_estimated")
+  stipendMin           Float?                     @map("stipend_min")
+  stipendMax           Float?                     @map("stipend_max")
+  stipendCurrency      String                     @default("USD") @map("stipend_currency")
+  stipendPeriod        String?                    @map("stipend_period")
+  isUnpaid             Boolean                    @default(false) @map("is_unpaid")
+  applyUrl             String                     @map("apply_url")
+  rawMetadata          Json?                      @map("raw_metadata")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
+
+  organization         Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sources              OpportunitySource[]
+  evidences            ContentEvidence[]
+  eligibilityReqs      EligibilityRequirement[]
+  locations            OpportunityLocation[]
+  benefits             OpportunityBenefit[]
+  matches              OpportunityMatch[]
+  statusHistory        OpportunityStatusHistory[]
+  savedBy              SavedOpportunity[]
+  applications         Application[]
+
+  @@index([category])
+  @@index([verificationStatus])
+  @@index([deadline])
+  @@index([publishedAt])
+  @@index([organizationId])
+  @@map("opportunities")
+}
+
+// -----------------------------------------------------------------------------
+// 7. Opportunity Sources Junction (One canonical -> many sources)
+// -----------------------------------------------------------------------------
+model OpportunitySource {
+  id                  String             @id @default(uuid()) @db.Uuid
+  opportunityId       String             @map("opportunity_id") @db.Uuid
+  sourceId            String             @map("source_id") @db.Uuid
+  discoveredContentId String?            @map("discovered_content_id") @db.Uuid
+  firstSeenAt         DateTime           @default(now()) @map("first_seen_at")
+
+  opportunity         Opportunity        @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  source              Source             @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  discoveredContent   DiscoveredContent? @relation(fields: [discoveredContentId], references: [id], onDelete: SetNull)
+
+  @@unique([opportunityId, sourceId])
+  @@map("opportunity_sources")
+}
+
+// -----------------------------------------------------------------------------
+// 8. Discovered Content (Raw ingest items)
+// -----------------------------------------------------------------------------
+model DiscoveredContent {
+  id                 String              @id @default(uuid()) @db.Uuid
+  sourceId           String              @map("source_id") @db.Uuid
+  contentHash        String              @unique @map("content_hash")
+  url                String
+  title              String
+  rawBody            String              @db.Text @map("raw_body")
+  cleanedBody        String?             @db.Text @map("cleaned_body")
+  discoveredAt       DateTime            @default(now()) @map("discovered_at")
+
+  source             Source              @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  evidences          ContentEvidence[]
+  opportunitySources OpportunitySource[]
+
+  @@index([sourceId])
+  @@index([discoveredAt])
+  @@map("discovered_content")
+}
+
+// -----------------------------------------------------------------------------
+// 9. Content Evidence (Traceability for fields like deadline, stipend, etc.)
+// -----------------------------------------------------------------------------
+model ContentEvidence {
+  id                  String             @id @default(uuid()) @db.Uuid
+  opportunityId       String             @map("opportunity_id") @db.Uuid
+  sourceId            String             @map("source_id") @db.Uuid
+  discoveredContentId String?            @map("discovered_content_id") @db.Uuid
+  fieldName           String             @map("field_name")
+  extractedValue      String             @db.Text @map("extracted_value")
+  confidence          Float              @default(1.0)
+  snippet             String             @db.Text
+  extractedAt         DateTime           @default(now()) @map("extracted_at")
+
+  opportunity         Opportunity        @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  source              Source             @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  discoveredContent   DiscoveredContent? @relation(fields: [discoveredContentId], references: [id], onDelete: SetNull)
+
+  @@index([opportunityId])
+  @@index([sourceId])
+  @@map("content_evidence")
+}
+
+// -----------------------------------------------------------------------------
+// 10. Eligibility Requirements
+// -----------------------------------------------------------------------------
+model EligibilityRequirement {
+  id              String      @id @default(uuid()) @db.Uuid
+  opportunityId   String      @map("opportunity_id") @db.Uuid
+  requirementType String      @map("requirement_type")
+  description     String      @db.Text
+  isMandatory     Boolean     @default(true) @map("is_mandatory")
+  rule            Json        @default("{}")
+
+  opportunity     Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("eligibility_requirements")
+}
+
+// -----------------------------------------------------------------------------
+// 11. Opportunity Locations
+// -----------------------------------------------------------------------------
+model OpportunityLocation {
+  id            String      @id @default(uuid()) @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  country       String?
+  city          String?
+  isRemote      Boolean     @default(false) @map("is_remote")
+  remoteRegions String[]    @default([]) @map("remote_regions")
+
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@index([country])
+  @@map("opportunity_locations")
+}
+
+// -----------------------------------------------------------------------------
+// 12. Opportunity Benefits
+// -----------------------------------------------------------------------------
+model OpportunityBenefit {
+  id            String      @id @default(uuid()) @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  benefitType   String      @map("benefit_type") // stipend, mentorship, accommodation, flight, credits
+  description   String      @db.Text
+  amount        Float?
+  currency      String?
+
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("opportunity_benefits")
+}
+
+// -----------------------------------------------------------------------------
+// 13. Opportunity Matches (Dual Separate Scores)
+// -----------------------------------------------------------------------------
+model OpportunityMatch {
+  id                    String      @id @default(uuid()) @db.Uuid
+  opportunityId         String      @map("opportunity_id") @db.Uuid
+  userId                String      @map("user_id") @db.Uuid
+  relevanceScore        Int         @map("relevance_score") // 0 - 100
+  relevanceFactors      Json        @default("[]") @map("relevance_factors")
+  eligibilityStatus     String      @map("eligibility_status") // eligible, likely_eligible, etc.
+  eligibilityAssessment Json        @default("{}") @map("eligibility_assessment")
+  explanation           String      @db.Text
+  createdAt             DateTime    @default(now()) @map("created_at")
+
+  opportunity           Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, userId])
+  @@index([userId, relevanceScore])
+  @@map("opportunity_matches")
+}
+
+// -----------------------------------------------------------------------------
+// 14. Opportunity Status History
+// -----------------------------------------------------------------------------
+model OpportunityStatusHistory {
+  id            String      @id @default(uuid()) @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  status        String
+  changedBy     String?     @map("changed_by")
+  reason        String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("opportunity_status_history")
+}
+
+// -----------------------------------------------------------------------------
+// 15. Saved Opportunities (Bookmarks)
+// -----------------------------------------------------------------------------
+model SavedOpportunity {
+  id            String      @id @default(uuid()) @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, userId])
+  @@index([userId])
+  @@map("saved_opportunities")
+}
+
+// -----------------------------------------------------------------------------
+// 16. Applications (Application Lifecycle Tracker)
+// -----------------------------------------------------------------------------
+model Application {
+  id             String                @id @default(uuid()) @db.Uuid
+  opportunityId  String                @map("opportunity_id") @db.Uuid
+  userId         String                @map("user_id") @db.Uuid
+  status         String                @default("saved") // saved, preparing, submitted, interviewing, etc.
+  appliedAt      DateTime?             @map("applied_at")
+  deadline       DateTime?
+  followUpDate   DateTime?             @map("follow_up_date")
+  notes          String?               @db.Text
+  checklist      Json                  @default("[]") // { id, task, completed }[]
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  opportunity    Opportunity           @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents      ApplicationDocument[]
+
+  @@unique([opportunityId, userId])
+  @@index([userId, status])
+  @@map("applications")
+}
+
+// -----------------------------------------------------------------------------
+// 17. Application Documents (CV, Transcripts, Cover letters)
+// -----------------------------------------------------------------------------
+model ApplicationDocument {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  name          String
+  fileUrl       String      @map("file_url")
+  type          String      // cv, cover_letter, transcript, portfolio
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([applicationId])
+  @@map("application_documents")
+}
+
+// -----------------------------------------------------------------------------
+// 18. Notifications
+// -----------------------------------------------------------------------------
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String    // priority_alert, daily_digest, deadline_reminder, source_issue, system
+  title     String
+  message   String    @db.Text
+  link      String?
+  read      Boolean   @default(false)
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// -----------------------------------------------------------------------------
+// 19. Notification Preferences
+// -----------------------------------------------------------------------------
+model NotificationPreference {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @map("user_id") @db.Uuid
+  channel   String  // in_app, email
+  eventType String  @map("event_type") // new_high_relevance, deadline_warning, source_failure
+  enabled   Boolean @default(true)
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channel, eventType])
+  @@map("notification_preferences")
+}
+
+// -----------------------------------------------------------------------------
+// 20. Processing Jobs (Worker job ledger and persistent heartbeat)
+// -----------------------------------------------------------------------------
+model ProcessingJob {
+  id         String    @id @default(uuid()) @db.Uuid
+  queueName  String    @map("queue_name")
+  jobId      String    @map("job_id")
+  jobType    String    @map("job_type")
+  payload    Json?
+  status     String    @default("pending") // pending, active, completed, failed
+  attempts   Int       @default(0)
+  error      String?   @db.Text
+  result     Json?
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([queueName, status])
+  @@index([createdAt])
+  @@map("processing_jobs")
+}
+
+// -----------------------------------------------------------------------------
+// 21. Audit Logs
+// -----------------------------------------------------------------------------
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  diff       Json?
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@edgi/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "echo worker test passed"
+  },
+  "dependencies": {
+    "@edgi/config": "workspace:*",
+    "@edgi/contracts": "workspace:*",
+    "@edgi/database": "workspace:*",
+    "bullmq": "^5.41.6",
+    "ioredis": "^5.5.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
