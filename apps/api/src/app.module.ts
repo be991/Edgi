@@ -12,6 +12,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
 import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ProcessingModule } from './modules/processing/processing.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     DiscoveryModule,
     ApplicationsModule,
     NotificationsModule,
+    ProcessingModule,
   ],
   providers: [
     PrismaService,

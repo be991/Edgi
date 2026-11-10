@@ -3,6 +3,7 @@ import Redis from 'ioredis';
 import { prisma } from '@edgi/database';
 import { processSourceCheckJob, SourceCheckJobData } from './source-processor';
 import { processDiscoveryJob, DiscoveryJobData } from './discovery-processor';
+import { processContentJob, ContentProcessingJobData, runReverificationSweep } from './content-processor';
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
@@ -122,7 +123,32 @@ async function bootstrap() {
     console.error(`❌ Discovery job #${job?.id} failed:`, err.message);
   });
 
-  // 4. Scheduler: checks for due sources every 60 seconds
+  // 4. Content Processing Queue (Phase 4 Pipeline)
+  const processingQueueName = 'content-processing-queue';
+  const processingQueue = new Queue<ContentProcessingJobData>(processingQueueName, {
+    connection: redisConnection,
+  });
+
+  const processingWorker = new Worker<ContentProcessingJobData>(
+    processingQueueName,
+    async (job: Job<ContentProcessingJobData>) => {
+      return processContentJob(job);
+    },
+    {
+      connection: redisConnection,
+      concurrency: 3,
+    }
+  );
+
+  processingWorker.on('completed', (job) => {
+    console.log(`✨ Content processing job #${job.id} (content: ${job.data.discoveredContentId}) finished.`);
+  });
+
+  processingWorker.on('failed', (job, err) => {
+    console.error(`❌ Content processing job #${job?.id} failed:`, err.message);
+  });
+
+  // 5. Scheduler: checks for due sources every 60 seconds
   const scheduleSourceChecks = async () => {
     try {
       const now = new Date();
@@ -157,16 +183,23 @@ async function bootstrap() {
   // Run an initial sweep after 5 seconds
   setTimeout(scheduleSourceChecks, 5000);
 
+  // 6. Re-verification Loop: checks active opportunities for expirations every 1 hour
+  const reverificationInterval = setInterval(runReverificationSweep, 3600000);
+  setTimeout(runReverificationSweep, 10000);
+
   // Graceful shutdown
   const shutdown = async () => {
     console.log('🛑 Shutting down workers gracefully...');
     clearInterval(schedulerInterval);
+    clearInterval(reverificationInterval);
     await heartbeatWorker.close();
     await sourceWorker.close();
     await discoveryWorker.close();
+    await processingWorker.close();
     await heartbeatQueue.close();
     await sourceQueue.close();
     await discoveryQueue.close();
+    await processingQueue.close();
     redisConnection.disconnect();
     await prisma.$disconnect();
     process.exit(0);

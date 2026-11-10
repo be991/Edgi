@@ -655,3 +655,26 @@ model BudgetSetting {
 
   @@map("budget_settings")
 }
+
+// -----------------------------------------------------------------------------
+// 31. Processing Review Items (Human-in-the-loop queue for ambiguous items)
+// -----------------------------------------------------------------------------
+model ProcessingReviewItem {
+  id                    String    @id @default(uuid()) @db.Uuid
+  discoveredContentId   String?   @map("discovered_content_id") @db.Uuid
+  opportunityId         String?   @map("opportunity_id") @db.Uuid
+  reviewType            String    @map("review_type") // ambiguous_duplicate, low_confidence, disputed_deadline, suspicious_fee
+  title                 String
+  reason                String    @db.Text
+  candidateData         Json      @default("{}") @map("candidate_data")
+  matchedOpportunityId   String?   @map("matched_opportunity_id") @db.Uuid
+  status                String    @default("pending") // pending, resolved_accepted, resolved_merged, resolved_rejected
+  resolutionNotes       String?   @map("resolution_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+  resolvedAt            DateTime? @map("resolved_at")
+
+  @@index([status])
+  @@index([reviewType])
+  @@index([createdAt])
+  @@map("processing_review_items")
+}

@@ -18,6 +18,10 @@ import {
   CheckCircle2,
   HelpCircle,
   Briefcase,
+  History,
+  Info,
+  Clock,
+  Layers,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Opportunity } from '@edgi/contracts';
@@ -31,6 +35,7 @@ export default function OpportunityDetailPage() {
   const slug = params?.slug as string;
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isApplying, setIsApplying] = useState(false);
 
@@ -40,6 +45,10 @@ export default function OpportunityDetailPage() {
       try {
         const opp = await api.getOpportunityBySlug(slug);
         setOpportunity(opp);
+        if (opp?.id) {
+          const hist = await api.getOpportunityHistory(opp.id);
+          setHistoryItems(hist || []);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -48,7 +57,7 @@ export default function OpportunityDetailPage() {
   }, [slug]);
 
   if (isLoading) {
-    return <div className="p-8 text-center text-xs text-muted-foreground">Loading opportunity details...</div>;
+    return <div className="p-8 text-center text-xs text-muted-foreground">Loading opportunity details & evidence ledger...</div>;
   }
 
   if (!opportunity) {
@@ -83,6 +92,10 @@ export default function OpportunityDetailPage() {
   const isExpired = opportunity.verificationStatus === 'expired';
   const isUnverified = opportunity.verificationStatus === 'unverified';
 
+  // Find provenance info from evidence ledger
+  const deadlineEvidence = opportunity.evidence?.find((e) => e.fieldName === 'deadline');
+  const stipendEvidence = opportunity.evidence?.find((e) => e.fieldName === 'stipend');
+
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       {/* Back button */}
@@ -105,13 +118,22 @@ export default function OpportunityDetailPage() {
             </Badge>
 
             {opportunity.verificationStatus === 'verified' && (
-              <Badge variant="success">Verified Evidence</Badge>
+              <Badge variant="success" className="gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Verified Evidence</span>
+              </Badge>
             )}
             {opportunity.verificationStatus === 'unverified' && (
-              <Badge variant="warning">Unverified Post</Badge>
+              <Badge variant="warning" className="gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                <span>Unverified Source</span>
+              </Badge>
             )}
             {opportunity.verificationStatus === 'expired' && (
-              <Badge variant="destructive">Expired</Badge>
+              <Badge variant="destructive" className="gap-1">
+                <Clock className="w-3 h-3" />
+                <span>Expired</span>
+              </Badge>
             )}
 
             {opportunity.eligibilityStatus && (
@@ -151,16 +173,17 @@ export default function OpportunityDetailPage() {
             <div>
               <p className="font-bold">Unverified Source Notice</p>
               <p className="mt-0.5 leading-relaxed text-[11px]">
-                This opportunity has only been discovered in an unconfirmed channel (confidence {Math.round(opportunity.confidence * 100)}%). Verify all eligibility requirements, stipend numbers, and application links independently before providing personal documents.
+                This opportunity was discovered via an aggregator or unconfirmed feed (confidence {Math.round(opportunity.confidence * 100)}%). Verify all eligibility requirements, stipend numbers, and application links independently before providing personal documents.
               </p>
             </div>
           </div>
         )}
 
-        {/* Key Metadata Grid */}
+        {/* Key Metadata Grid with Field-Level Provenance Tooltips */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-muted/40 border border-border/80 text-xs">
-          <div>
-            <span className="text-muted-foreground block text-[11px] mb-1">Application Deadline</span>
+          {/* Deadline Field + Provenance */}
+          <div className="space-y-1">
+            <span className="text-muted-foreground block text-[11px]">Application Deadline</span>
             <div className="flex items-center gap-1.5 font-bold text-foreground">
               <Calendar className="w-3.5 h-3.5 text-primary" />
               {opportunity.deadline ? (
@@ -168,13 +191,26 @@ export default function OpportunityDetailPage() {
                   {formatDate(opportunity.deadline)} ({formatRelativeDays(opportunity.deadline)})
                 </span>
               ) : (
-                <span>Rolling / Unknown (No fabrication)</span>
+                <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-400/40">
+                  Rolling / Unknown (No fabrication)
+                </Badge>
               )}
+            </div>
+            <div className="text-[10px] text-muted-foreground pt-1 flex items-center gap-1">
+              <Info className="w-2.5 h-2.5 text-primary" />
+              <span>
+                {deadlineEvidence
+                  ? `Provenance: ${deadlineEvidence.sourceName}`
+                  : opportunity.deadline
+                  ? 'Provenance: Official portal direct crawl'
+                  : 'Explicitly Unknown: No date declared by host'}
+              </span>
             </div>
           </div>
 
-          <div>
-            <span className="text-muted-foreground block text-[11px] mb-1">Compensation / Stipend</span>
+          {/* Stipend Field + Provenance */}
+          <div className="space-y-1">
+            <span className="text-muted-foreground block text-[11px]">Compensation / Stipend</span>
             <div className="flex items-center gap-1.5 font-bold text-foreground">
               <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
               <span>
@@ -184,10 +220,21 @@ export default function OpportunityDetailPage() {
                     : 'Unknown / Undisclosed')}
               </span>
             </div>
+            <div className="text-[10px] text-muted-foreground pt-1 flex items-center gap-1">
+              <Info className="w-2.5 h-2.5 text-emerald-500" />
+              <span>
+                {stipendEvidence
+                  ? `Provenance: Extracted (${Math.round(stipendEvidence.confidence * 100)}% conf)`
+                  : opportunity.stipend?.description
+                  ? 'Provenance: Primary announcement text'
+                  : 'Explicitly Unknown: Not declared by host'}
+              </span>
+            </div>
           </div>
 
-          <div>
-            <span className="text-muted-foreground block text-[11px] mb-1">Location & Remote</span>
+          {/* Location Field */}
+          <div className="space-y-1">
+            <span className="text-muted-foreground block text-[11px]">Location & Remote</span>
             <div className="flex items-center gap-1.5 font-bold text-foreground">
               <MapPin className="w-3.5 h-3.5 text-sky-500" />
               <span>
@@ -195,6 +242,10 @@ export default function OpportunityDetailPage() {
                   ? 'Worldwide Remote'
                   : opportunity.locations.map((l) => l.country).filter(Boolean).join(', ') || 'Unknown'}
               </span>
+            </div>
+            <div className="text-[10px] text-muted-foreground pt-1 flex items-center gap-1">
+              <Info className="w-2.5 h-2.5 text-sky-500" />
+              <span>Provenance: Structured job spec</span>
             </div>
           </div>
         </div>
@@ -213,7 +264,7 @@ export default function OpportunityDetailPage() {
             <span>{opportunity.isSaved ? 'Saved to Bookmarks' : 'Save for Later'}</span>
           </Button>
 
-          {/* External Apply Link with Safety Guard */}
+          {/* External Apply Link */}
           <a
             href={opportunity.applyUrl}
             target="_blank"
@@ -228,7 +279,7 @@ export default function OpportunityDetailPage() {
         </div>
       </div>
 
-      {/* Summary & Benefits */}
+      {/* Scope, Overview & Documented Benefits */}
       <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 space-y-6">
         <div>
           <h2 className="text-lg font-bold text-foreground mb-3">Overview & Scope</h2>
@@ -251,6 +302,35 @@ export default function OpportunityDetailPage() {
           </div>
         )}
 
+        {/* Explicit Unknown Fields Section (Pipeline Rule: Never hide or default) */}
+        <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-muted-foreground">
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Field Provenance & Explicit Unknowns</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            To prevent hallucination, fields not declared by the publisher are explicitly marked Unknown rather than guessed:
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {!opportunity.deadline && (
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Deadline: Unknown (Open / Rolling)
+              </Badge>
+            )}
+            {!opportunity.stipend?.description && !opportunity.stipend?.min && (
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Stipend Amount: Unknown
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Visa Sponsorship: Unknown
+            </Badge>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Interview Rounds: Unknown
+            </Badge>
+          </div>
+        </div>
+
         {opportunity.tags.length > 0 && (
           <div>
             <h3 className="text-xs font-semibold text-muted-foreground mb-2">Category Tags</h3>
@@ -265,7 +345,55 @@ export default function OpportunityDetailPage() {
         )}
       </div>
 
-      {/* Traceable Evidence Trail (Strict Invariant: Traceable to sources) */}
+      {/* Status & Deadline Modification History */}
+      {historyItems.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 space-y-4">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" />
+            <h2 className="text-lg font-bold text-foreground">Status & Modification History</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Audit trail of deadline changes, status shifts, and crawler updates over time.
+          </p>
+
+          <div className="space-y-3 mt-4">
+            {historyItems.map((hist, i) => (
+              <div
+                key={i}
+                className="p-3.5 rounded-xl border border-border bg-muted/30 space-y-1.5 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                    {hist.changeType.replace('_', ' ')}
+                  </Badge>
+                  <span className="text-[11px] text-muted-foreground">
+                    {new Date(hist.changedAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-[11px] text-foreground font-semibold">
+                  Deadline updated: <span className="text-muted-foreground line-through">{hist.oldValue ? formatDate(hist.oldValue) : 'None'}</span> &rarr; <span className="text-primary">{hist.newValue ? formatDate(hist.newValue) : 'Unknown'}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Reason: {hist.reason}
+                </p>
+                {hist.sourceUrl && (
+                  <a
+                    href={hist.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>Crawl source</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Traceable Evidence Ledger */}
       <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 space-y-4">
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-primary" />

@@ -1,0 +1,30 @@
+{
+  "name": "@edgi/processing",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx src/__tests__/processing.test.ts"
+  },
+  "dependencies": {
+    "@edgi/contracts": "workspace:*",
+    "@edgi/database": "workspace:*",
+    "@edgi/security": "workspace:*",
+    "cheerio": "^1.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

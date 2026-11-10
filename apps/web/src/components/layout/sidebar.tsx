@@ -16,6 +16,7 @@ import {
   Settings,
   ShieldAlert,
   FolderGit2,
+  GitMerge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/applications', label: 'Application Tracker', icon: Briefcase },
   { href: '/sources', label: 'Sources & Health', icon: Radio },
   { href: '/sources/candidates', label: 'Candidate Approvals', icon: FileCheck2 },
+  { href: '/processing', label: 'Processing Queue', icon: GitMerge },
   { href: '/organizations', label: 'Organizations', icon: Building2 },
   { href: '/profile', label: 'Profile & Criteria', icon: UserCheck },
   { href: '/usage', label: 'Budget & Telemetry', icon: CircleDollarSign },

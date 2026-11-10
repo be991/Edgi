@@ -17,12 +17,14 @@ import { mockApplications } from '../fixtures/applications';
 import { mockUserProfile, mockUserPreferences } from '../fixtures/profile';
 import { mockNotifications } from '../fixtures/notifications';
 import { mockUsageBudget, mockSystemHealth } from '../fixtures/usage';
+import { mockProcessingReviewItems, ProcessingReviewItemMock } from '../fixtures/processing';
 
 const API_MODE = process.env.NEXT_PUBLIC_API_MODE || 'mock';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 // In-memory mock state for interactive demo persistence
 let inMemoryOpportunities = [...mockOpportunities];
+let inMemoryReviewItems = [...mockProcessingReviewItems];
 let inMemorySources = [...mockSources];
 let inMemoryCandidateSources = [...mockCandidateSources];
 let inMemoryApplications = [...mockApplications];
@@ -589,6 +591,122 @@ export const api = {
     }
     const res = await fetch(`${API_URL}/system/health`);
     if (!res.ok) throw new Error('Failed to fetch health');
+    return res.json();
+  },
+
+  // 8. Phase 4: Opportunity Processing & Review Queue
+  async captureOpportunity(data: { url?: string; text?: string; saveImmediately?: boolean }): Promise<any> {
+    if (API_MODE === 'mock') {
+      const isUrl = Boolean(data.url);
+      const isFeeScam = (data.url?.includes('fake-host') || data.text?.includes('application fee') || data.text?.includes('$45'));
+      const isExpired = data.text?.includes('expired') || data.text?.includes('closed on');
+      
+      return {
+        mode: isUrl ? 'url' : 'text',
+        sourceUrl: data.url || 'Manual Paste',
+        isOpportunity: true,
+        confidence: 0.95,
+        opportunity: {
+          title: data.url ? 'Captured: ' + data.url.replace(/https?:\/\//, '').split('/')[0] + ' Opportunity' : 'Captured Manual Announcement',
+          organization: 'Detected Organization',
+          category: 'fellowship',
+          deadline: isExpired ? '2025-01-01T00:00:00.000Z' : '2026-12-15T23:59:59.000Z',
+          applyUrl: data.url || 'https://example.com/apply',
+          summary: data.text ? data.text.slice(0, 160) + '...' : 'Extracted from ' + data.url,
+          stipend: '$3,000 USD stipend',
+          locations: [{ country: 'Global', isRemote: true }],
+          benefits: ['Mentorship', 'Remote stipend'],
+          unknownFields: ['eligibilityMinGpa', 'exactSelectionDate'],
+        },
+        deduplication: {
+          decision: 'create_canonical',
+          confidence: 0.98,
+          layer: 'new_entry',
+        },
+        verification: {
+          isLegitimate: !isFeeScam,
+          isExpired: isExpired,
+          reasons: isFeeScam ? ['Contains $45 upfront application fee'] : ['Verified primary announcement'],
+        },
+      };
+    }
+
+    const res = await fetch(`${API_URL}/opportunities/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to capture opportunity');
+    }
+    return res.json();
+  },
+
+  async getReviewItems(status?: string): Promise<{ items: ProcessingReviewItemMock[]; total: number }> {
+    if (API_MODE === 'mock') {
+      let filtered = [...inMemoryReviewItems];
+      if (status) {
+        filtered = filtered.filter((i) => i.status === status);
+      }
+      return { items: filtered, total: filtered.length };
+    }
+    const query = status ? `?status=${status}` : '';
+    const res = await fetch(`${API_URL}/processing/review${query}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch processing review items');
+    return res.json();
+  },
+
+  async resolveReviewItem(id: string, action: 'accept' | 'merge' | 'reject', notes?: string): Promise<any> {
+    if (API_MODE === 'mock') {
+      inMemoryReviewItems = inMemoryReviewItems.map((item) => {
+        if (item.id === id) {
+          return {
+            ...item,
+            status: action === 'reject' ? 'rejected' : 'resolved',
+            resolution: `Resolved via ${action}${notes ? ': ' + notes : ''}`,
+          };
+        }
+        return item;
+      });
+      return { success: true, action, id };
+    }
+
+    const res = await fetch(`${API_URL}/processing/review/${id}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!res.ok) throw new Error(`Failed to ${action} review item`);
+    return res.json();
+  },
+
+  async getOpportunityEvidence(id: string): Promise<any[]> {
+    if (API_MODE === 'mock') {
+      const opp = inMemoryOpportunities.find((o) => o.id === id || o.slug === id);
+      return opp?.evidence || [];
+    }
+    const res = await fetch(`${API_URL}/opportunities/${id}/evidence`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async getOpportunityHistory(id: string): Promise<any[]> {
+    if (API_MODE === 'mock') {
+      return [
+        {
+          id: 'hist-1',
+          changeType: 'deadline_extended',
+          oldValue: '2026-11-20T00:00:00.000Z',
+          newValue: '2026-11-23T23:59:59.000Z',
+          reason: 'Source updated application timeline on official portal',
+          sourceUrl: 'https://openssf.org/blog/2026/11/fellowship-applications-open',
+          changedAt: '2026-11-02T12:00:00.000Z',
+        },
+      ];
+    }
+    const res = await fetch(`${API_URL}/opportunities/${id}/history`, { cache: 'no-store' });
+    if (!res.ok) return [];
     return res.json();
   },
 };
