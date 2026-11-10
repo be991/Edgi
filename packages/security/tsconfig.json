@@ -6,6 +6,5 @@
     "declaration": true,
     "declarationMap": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["src/**/__tests__/*"]
+  "include": ["src/**/*"]
 }

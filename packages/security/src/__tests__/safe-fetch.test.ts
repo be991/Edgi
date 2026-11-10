@@ -79,7 +79,7 @@ async function runTests() {
   // 3. HTTP Server Setup for Behavior Tests
   console.log('\n--- 3. Redirect Re-resolution & Content Constraints Tests ---');
   let testServerPort = 0;
-  const server = http.createServer((req, res) => {
+  const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = req.url || '/';
 
     if (url === '/safe-html') {
@@ -129,7 +129,7 @@ async function runTests() {
     try {
       // Mock request bypassing IP check for server endpoint test
       const res = await new Promise<boolean>((resolve, reject) => {
-        const req = http.get(`http://127.0.0.1:${testServerPort}/bad-content-type`, (res) => {
+        const req = http.get(`http://127.0.0.1:${testServerPort}/bad-content-type`, (res: http.IncomingMessage) => {
           const contentType = ((res.headers['content-type'] || '').split(';')[0] ?? '').trim();
           const allowed = ['text/html', 'application/xml'];
           if (!allowed.includes(contentType)) {
@@ -149,7 +149,7 @@ async function runTests() {
     try {
       const maxBytes = 100 * 1024; // 100 KB limit
       await new Promise<void>((resolve, reject) => {
-        const req = http.get(`http://127.0.0.1:${testServerPort}/huge-payload`, (res) => {
+        const req = http.get(`http://127.0.0.1:${testServerPort}/huge-payload`, (res: http.IncomingMessage) => {
           let received = 0;
           res.on('data', (chunk) => {
             received += chunk.length;
