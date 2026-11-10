@@ -103,14 +103,14 @@ export default function SourcesPage() {
     try {
       const res = await api.checkSourceNow(id);
       if (res.success) {
-        setToastMessage(`✨ Check completed for "${name}": ${res.itemsFound} items evaluated, ${res.itemsNew} new records ingested.`);
+        setToastMessage(`Check completed for "${name}": ${res.itemsFound} items evaluated, ${res.itemsNew} new records ingested.`);
       } else {
-        setToastMessage(`⚠️ Check failed for "${name}": ${res.errorMessage}`);
+        setToastMessage(`Check failed for "${name}": ${res.errorMessage}`);
       }
       setTimeout(() => setToastMessage(null), 5000);
       await loadSources();
     } catch (err: unknown) {
-      setToastMessage(`❌ Error triggering check: ${err instanceof Error ? err.message : String(err)}`);
+      setToastMessage(`Error triggering check: ${err instanceof Error ? err.message : String(err)}`);
       setTimeout(() => setToastMessage(null), 5000);
     } finally {
       setCheckLoadingId(null);

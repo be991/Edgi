@@ -573,3 +573,85 @@ model SourceAutoTrustRule {
 
   @@map("source_auto_trust_rules")
 }
+
+// -----------------------------------------------------------------------------
+// 27. Provider Usage (Audit ledger for search API and LLM spend per call)
+// -----------------------------------------------------------------------------
+model ProviderUsage {
+  id            String   @id @default(uuid()) @db.Uuid
+  provider      String   // brave_search, serper, mock_search, openai, etc.
+  operation     String   // search, llm_extract, preflight
+  units         Int      @default(1)
+  estimatedCost Float    @map("estimated_cost")
+  jobId         String?  @map("job_id")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([provider])
+  @@index([createdAt])
+  @@map("provider_usage")
+}
+
+// -----------------------------------------------------------------------------
+// 28. Discovery Runs (Independent search run records and performance metrics)
+// -----------------------------------------------------------------------------
+model DiscoveryRun {
+  id              String    @id @default(uuid()) @db.Uuid
+  provider        String
+  status          String    @default("running") // running, completed, paused_budget, failed
+  queriesExecuted Int       @default(0) @map("queries_executed")
+  leadsFound      Int       @default(0) @map("leads_found")
+  leadsNew        Int       @default(0) @map("leads_new")
+  costUsd         Float     @default(0.0) @map("cost_usd")
+  errorMessage    String?   @map("error_message") @db.Text
+  querySummary    Json      @default("[]") @map("query_summary")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+
+  leads           DiscoveredLead[]
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("discovery_runs")
+}
+
+// -----------------------------------------------------------------------------
+// 29. Discovered Leads (Unverified leads found via search before processing)
+// -----------------------------------------------------------------------------
+model DiscoveredLead {
+  id                  String        @id @default(uuid()) @db.Uuid
+  runId               String?       @map("run_id") @db.Uuid
+  url                 String        @unique
+  title               String
+  snippet             String        @db.Text
+  domain              String
+  provider            String
+  query               String
+  relevanceScore      Float         @default(0.5) @map("relevance_score")
+  status              String        @default("unverified") // unverified, queued_for_processing, dismissed, converted_source
+  discoveredContentId String?       @map("discovered_content_id") @db.Uuid
+  discoveredAt        DateTime      @default(now()) @map("discovered_at")
+  reviewedAt          DateTime?     @map("reviewed_at")
+
+  run                 DiscoveryRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([domain])
+  @@index([status])
+  @@index([discoveredAt])
+  @@map("discovered_leads")
+}
+
+// -----------------------------------------------------------------------------
+// 30. Budget Settings (Configurable caps and emergency pause state)
+// -----------------------------------------------------------------------------
+model BudgetSetting {
+  id                 String   @id @default(uuid()) @db.Uuid
+  monthlyTotalBudget Float    @default(10.0) @map("monthly_total_budget")
+  searchBudget       Float    @default(4.0) @map("search_budget")
+  llmBudget          Float    @default(5.0) @map("llm_budget")
+  bufferBudget       Float    @default(1.0) @map("buffer_budget")
+  isEmergencyPaused  Boolean  @default(false) @map("is_emergency_paused")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("budget_settings")
+}

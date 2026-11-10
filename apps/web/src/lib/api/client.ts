@@ -443,12 +443,143 @@ export const api = {
   },
 
   // 6. Usage & Health
-  async getUsageBudget(): Promise<UsageBudget> {
+  async getUsageBudget(): Promise<UsageBudget & { isEmergencyPaused?: boolean; searchSpentUsd?: number; llmSpentUsd?: number; bufferRemainingUsd?: number; status?: string }> {
     if (API_MODE === 'mock') {
       return { ...inMemoryBudget };
     }
-    const res = await fetch(`${API_URL}/usage`);
+    const res = await fetch(`${API_URL}/usage`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch usage');
+    return res.json();
+  },
+
+  async updateBudgetSettings(data: { monthlyTotalBudget?: number; searchBudget?: number; llmBudget?: number; bufferBudget?: number; isEmergencyPaused?: boolean }): Promise<any> {
+    if (API_MODE === 'mock') {
+      inMemoryBudget = { ...inMemoryBudget, ...data };
+      return inMemoryBudget;
+    }
+    const res = await fetch(`${API_URL}/usage/budget`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update budget settings');
+    return res.json();
+  },
+
+  // 7. Phase 3: Independent Discovery & Leads Inbox
+  async runDiscovery(input: { dryRun?: boolean; maxQueries?: number; provider?: string } = {}): Promise<any> {
+    if (API_MODE === 'mock') {
+      return {
+        runId: 'mock-run-' + Date.now(),
+        dryRun: Boolean(input.dryRun),
+        queriesExecuted: input.dryRun ? 0 : 5,
+        leadsFound: input.dryRun ? 0 : 4,
+        totalCostUsd: 0.0,
+        status: 'completed',
+      };
+    }
+    const res = await fetch(`${API_URL}/discovery/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Discovery run failed');
+    }
+    return res.json();
+  },
+
+  async getQueriesPreview(limit = 10): Promise<{ queries: any[]; total: number; dimensions: any }> {
+    if (API_MODE === 'mock') {
+      return {
+        queries: [
+          { query: 'site:paystack.com/careers (AppSec OR "security engineer")', dimension: 'priority_org', priority: 1, reason: 'Targeted search for priority org Paystack' },
+          { query: 'site:flutterwave.com/careers (AppSec OR "security engineer")', dimension: 'priority_org', priority: 1, reason: 'Targeted search for priority org Flutterwave' },
+          { query: '"cybersecurity" "internship" "Nigeria" 2025 OR 2026', dimension: 'category_skill_region', priority: 2, reason: 'Category internship x Skill cybersecurity x Region Nigeria' },
+          { query: '"fintech security" "fellowship" "Nigeria" 2025 OR 2026', dimension: 'category_skill_region', priority: 2, reason: 'Category fellowship x Skill fintech security x Region Nigeria' },
+          { query: '"AppSec" "hackathon" fully funded 2025 OR 2026', dimension: 'category_skill_funding', priority: 2, reason: 'Category hackathon_ctf x Skill AppSec x Funding fully funded' },
+        ],
+        total: 5,
+        dimensions: { categories: ['fellowship', 'internship', 'hackathon_ctf'], skills: ['AppSec', 'fintech security'], regions: ['Nigeria'] },
+      };
+    }
+    const res = await fetch(`${API_URL}/discovery/queries?limit=${limit}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch query preview');
+    return res.json();
+  },
+
+  async getDiscoveryHistory(limit = 20): Promise<any[]> {
+    if (API_MODE === 'mock') {
+      return [
+        {
+          id: 'run-mock-1',
+          provider: 'mock_search',
+          queriesExecuted: 4,
+          leadsFound: 4,
+          costUsd: 0.0,
+          status: 'completed',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+    const res = await fetch(`${API_URL}/discovery/history?limit=${limit}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch discovery history');
+    return res.json();
+  },
+
+  async getLeads(status?: string): Promise<{ leads: any[]; total: number }> {
+    if (API_MODE === 'mock') {
+      return {
+        leads: [
+          {
+            id: 'lead-mock-1',
+            url: 'https://paystack.com/careers/appsec-intern',
+            title: 'Paystack Application Security Intern (Lagos / Remote)',
+            snippet: 'Paystack is hiring an Application Security Intern to assist in vulnerability management and secure code reviews.',
+            publisherDomain: 'paystack.com',
+            searchProvider: 'mock_search',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 'lead-mock-2',
+            url: 'https://flutterwave.com/careers/cyber-fellow',
+            title: 'Flutterwave Graduate Cybersecurity Fellowship 2025',
+            snippet: 'Join Flutterwave infosec defense team for an intensive 6-month hands-on fellowship in payment security.',
+            publisherDomain: 'flutterwave.com',
+            searchProvider: 'mock_search',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        total: 2,
+      };
+    }
+    const query = status ? `?status=${status}` : '';
+    const res = await fetch(`${API_URL}/leads${query}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch leads');
+    return res.json();
+  },
+
+  async processLead(id: string): Promise<any> {
+    if (API_MODE === 'mock') return { success: true };
+    const res = await fetch(`${API_URL}/leads/${id}/process`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to send lead to processing');
+    return res.json();
+  },
+
+  async dismissLead(id: string): Promise<any> {
+    if (API_MODE === 'mock') return { success: true };
+    const res = await fetch(`${API_URL}/leads/${id}/dismiss`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to dismiss lead');
+    return res.json();
+  },
+
+  async addLeadAsSource(id: string): Promise<any> {
+    if (API_MODE === 'mock') return { success: true };
+    const res = await fetch(`${API_URL}/leads/${id}/add-source`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to add lead as candidate source');
     return res.json();
   },
 

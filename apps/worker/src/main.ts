@@ -2,6 +2,7 @@ import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '@edgi/database';
 import { processSourceCheckJob, SourceCheckJobData } from './source-processor';
+import { processDiscoveryJob, DiscoveryJobData } from './discovery-processor';
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
@@ -96,7 +97,32 @@ async function bootstrap() {
     console.error(`❌ Source check job #${job?.id} failed:`, err.message);
   });
 
-  // 3. Scheduler: checks for due sources every 60 seconds
+  // 3. Discovery Execution Queue
+  const discoveryQueueName = 'discovery-queue';
+  const discoveryQueue = new Queue<DiscoveryJobData>(discoveryQueueName, {
+    connection: redisConnection,
+  });
+
+  const discoveryWorker = new Worker<DiscoveryJobData>(
+    discoveryQueueName,
+    async (job: Job<DiscoveryJobData>) => {
+      return processDiscoveryJob(job);
+    },
+    {
+      connection: redisConnection,
+      concurrency: 2,
+    }
+  );
+
+  discoveryWorker.on('completed', (job) => {
+    console.log(`✨ Discovery job #${job.id} (run: ${job.data.runId}) finished.`);
+  });
+
+  discoveryWorker.on('failed', (job, err) => {
+    console.error(`❌ Discovery job #${job?.id} failed:`, err.message);
+  });
+
+  // 4. Scheduler: checks for due sources every 60 seconds
   const scheduleSourceChecks = async () => {
     try {
       const now = new Date();
@@ -137,8 +163,10 @@ async function bootstrap() {
     clearInterval(schedulerInterval);
     await heartbeatWorker.close();
     await sourceWorker.close();
+    await discoveryWorker.close();
     await heartbeatQueue.close();
     await sourceQueue.close();
+    await discoveryQueue.close();
     redisConnection.disconnect();
     await prisma.$disconnect();
     process.exit(0);

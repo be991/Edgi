@@ -14,6 +14,7 @@
     "@edgi/connectors": "workspace:*",
     "@edgi/contracts": "workspace:*",
     "@edgi/database": "workspace:*",
+    "@edgi/search-providers": "workspace:*",
     "@edgi/security": "workspace:*",
     "@nestjs/common": "^11.0.10",
     "@nestjs/core": "^11.0.10",

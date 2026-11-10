@@ -9,6 +9,7 @@ import { SystemModule } from './modules/system/system.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { SourcesModule } from './modules/sources/sources.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 
@@ -27,6 +28,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     OpportunitiesModule,
     SourcesModule,
     OrganizationsModule,
+    DiscoveryModule,
     ApplicationsModule,
     NotificationsModule,
   ],

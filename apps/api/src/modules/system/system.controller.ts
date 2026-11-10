@@ -55,23 +55,4 @@ export class SystemController {
       },
     };
   }
-
-  @Get('usage')
-  @ApiOperation({ summary: 'Get current monthly budget and spend' })
-  getUsage() {
-    return {
-      month: '2026-11',
-      totalLimitUsd: 10.0,
-      totalSpentUsd: 3.45,
-      searchSpentUsd: 1.2,
-      searchLimitUsd: 4.0,
-      llmSpentUsd: 2.25,
-      llmLimitUsd: 5.0,
-      bufferRemainingUsd: 1.0,
-      warningThresholdPercent: 70,
-      hardStopThresholdPercent: 100,
-      isHardStopActive: false,
-      lastUpdated: new Date().toISOString(),
-    };
-  }
 }
