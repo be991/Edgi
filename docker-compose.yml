@@ -6,7 +6,7 @@ services:
     container_name: edgi-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432" # Mapped to 5433 to avoid conflict with existing host PostgreSQL
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
@@ -39,8 +39,8 @@ services:
     container_name: edgi-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025" # SMTP port
-      - "8025:8025" # Web UI
+      - "1025:1025"
+      - "8025:8025"
     environment:
       MP_MAX_MESSAGES: 500
 

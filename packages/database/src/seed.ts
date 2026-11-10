@@ -3,81 +3,90 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting database seed for Edgi...');
+  console.log('🌱 Starting database seed for Edgi with Bethel Okafor Egwuchukwu profile...');
 
-  // 1. Create or upsert primary user
+  // 1. Create primary user
   const user = await prisma.user.upsert({
-    where: { email: 'developer@edgi.local' },
+    where: { email: 'bethelokafor34562@gmail.com' },
     update: {},
     create: {
       id: '00000000-0000-0000-0000-000000000001',
-      email: 'developer@edgi.local',
+      email: 'bethelokafor34562@gmail.com',
     },
   });
 
   console.log(`👤 Seeded User: ${user.email} (${user.id})`);
 
-  // 2. Create User Profile (200-level Cyber Security student)
+  // 2. Create Bethel's Profile
   await prisma.userProfile.upsert({
     where: { userId: user.id },
     update: {},
     create: {
       userId: user.id,
-      fullName: 'Cyber Security Student & Developer',
-      headline: '200-level Cyber Security Student | Software & AppSec Developer',
-      degree: 'B.Sc. Cybersecurity',
-      major: 'Cybersecurity & Information Assurance',
-      yearOfStudy: '200-level',
-      university: 'University Technology Campus',
-      country: 'Nigeria',
+      fullName: 'Bethel Okafor Egwuchukwu',
+      headline: '200-level Cyber Security Student (CGPA: 4.10) | Senior Software Engineer & Tech Lead',
+      degree: 'Bachelor of Science: Cyber Security',
+      major: 'Cyber Security (Dean\'s List, Fall 2025)',
+      yearOfStudy: '200-level (Expected 2028)',
+      university: 'Newgate University Minna',
+      country: 'Nigeria (Kubwa, Abuja)',
       timezone: 'Africa/Lagos',
-      bio: 'Cyber Security undergraduate and software developer focused on Application Security, secure software architecture, fintech security, and applied AI systems. Actively seeking funded international programmes, hackathons, and research fellowships.',
+      bio: 'Cyber Security student (CGPA: 4.10) and software engineer / technical lead. Deep practical background in fintech payment infrastructure, application security, AES-256-GCM encryption, Web3 platforms, and applied AI agents (Gemini RAG). Actively targeting funded international fellowships, AppSec programmes, CTF competitions, and research opportunities.',
       skills: [
         'Application Security',
         'Penetration Testing',
-        'TypeScript',
-        'Python',
-        'NestJS',
         'Next.js',
-        'Network Security',
-        'Cryptography',
+        'React.js',
+        'TypeScript',
+        'Node.js',
+        'NestJS',
+        'PostgreSQL',
+        'Redis',
+        'Supabase',
+        'Firebase',
+        'Python',
         'Docker',
-        'Reverse Engineering',
+        'AES-256-GCM Encryption',
+        'AWS',
+        'Web3 & Hedera',
+        'RAG & AI Agents',
+        'PHP & Laravel',
       ],
       targetRoles: [
-        'AppSec Intern',
-        'Security Engineer Fellow',
+        'AppSec Research Fellow',
+        'Fintech Security Engineer',
         'Full Stack Security Developer',
-        'CTF Competitor',
+        'International Cyber Security Intern',
       ],
       interests: [
-        'Fintech Security',
-        'AI Safety & Security',
+        'Fintech Security & Compliance',
+        'AI Safety & Vulnerability Research',
         'Funded Global Fellowships',
-        'Open Source Security',
-        'Bug Bounties',
+        'Open Source Security Bounties',
+        'CTF Blue/Red Team Competitions',
       ],
       links: {
-        github: 'https://github.com/developer-edgi',
-        linkedin: 'https://linkedin.com/in/developer-edgi',
-        portfolio: 'https://developer-edgi.dev',
+        github: 'https://github.com/be991',
+        portfolio: 'https://bethelegwuchukwu.vercel.app/',
+        linkedin: '',
+        cvUrl: 'https://bethelegwuchukwu.vercel.app/',
       },
     },
   });
 
-  // 3. Create User Preferences
+  // 3. Create Preferences
   await prisma.userPreferences.upsert({
     where: { userId: user.id },
     update: {},
     create: {
       userId: user.id,
       targetCategories: [
-        'internship',
         'fellowship',
+        'internship',
         'hackathon_ctf',
         'dev_programme',
-        'oss_bounty',
         'funding',
+        'oss_bounty',
       ],
       minRelevanceScore: 65,
       notifyInApp: true,
@@ -102,7 +111,7 @@ async function main() {
       website: 'https://openssf.org',
       country: 'Global',
       verified: true,
-      description: 'Cross-industry organization advancing open-source security.',
+      description: 'Cross-industry organization advancing open-source software security and fuzzing.',
     },
   });
 
@@ -115,11 +124,11 @@ async function main() {
       website: 'https://mlh.io',
       country: 'United States',
       verified: true,
-      description: 'Official student hackathon league and fellowship incubator.',
+      description: 'Official student hackathon league and global fellowship incubator.',
     },
   });
 
-  // 5. Seed Sources
+  // 5. Seed Initial Sources
   await prisma.source.upsert({
     where: { slug: 'openssf-feed' },
     update: {},
@@ -142,13 +151,13 @@ async function main() {
         nextCheck: new Date(Date.now() + 3600000).toISOString(),
         lastError: null,
         consecutiveFailures: 0,
-        latencyMs: 340,
+        latencyMs: 310,
         totalItemsDiscovered: 42,
       },
     },
   });
 
-  console.log('✅ Database seeded successfully with initial profile and sources.');
+  console.log('✅ Database seeded successfully with Bethel Okafor Egwuchukwu profile and initial sources.');
 }
 
 main()
