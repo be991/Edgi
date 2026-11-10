@@ -1,30 +1,103 @@
-import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { PrismaService } from '../../prisma.service';
+import { SourcesService, CreateSourceDto, UpdateSourceDto } from './sources.service';
 
 @ApiTags('Sources')
-@Controller('sources')
+@Controller()
 export class SourcesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly sourcesService: SourcesService) {}
 
-  @Get()
+  @Get('sources')
   @ApiOperation({ summary: 'List registered crawler and ingestion sources' })
-  async getSources() {
-    const sources = await this.prisma.source.findMany({
-      include: { organization: true },
-    });
-    return sources;
+  async getSources(
+    @Query('connectorType') connectorType?: string,
+    @Query('status') status?: string
+  ) {
+    return this.sourcesService.listSources({ connectorType, status });
   }
 
-  @Get('candidates')
-  @ApiOperation({ summary: 'List candidate sources discovered by search' })
-  getCandidates() {
-    return [];
+  @Post('sources/evaluate')
+  @ApiOperation({ summary: 'Pre-flight evaluation of target URL (detects type, capabilities, restrictions)' })
+  async evaluateSourceUrl(@Body() body: { url: string }) {
+    return this.sourcesService.evaluateUrl(body.url);
   }
 
-  @Patch('candidates/:id')
-  @ApiOperation({ summary: 'Update candidate status (approved/ignored/blocked)' })
-  updateCandidate(@Param('id') id: string, @Body() body: any) {
-    return { id, status: body.status };
+  @Post('sources')
+  @ApiOperation({ summary: 'Register a new verified source' })
+  async createSource(@Body() body: CreateSourceDto) {
+    return this.sourcesService.createSource(body);
+  }
+
+  @Get('sources/:id')
+  @ApiOperation({ summary: 'Get source details, capabilities, error logs, and runs' })
+  async getSource(@Param('id') id: string) {
+    return this.sourcesService.getSource(id);
+  }
+
+  @Patch('sources/:id')
+  @ApiOperation({ summary: 'Update source parameters (status, schedule interval, config)' })
+  async updateSource(@Param('id') id: string, @Body() body: UpdateSourceDto) {
+    return this.sourcesService.updateSource(id, body);
+  }
+
+  @Delete('sources/:id')
+  @ApiOperation({ summary: 'Delete source' })
+  async deleteSource(@Param('id') id: string) {
+    return this.sourcesService.deleteSource(id);
+  }
+
+  @Get('sources/:id/health')
+  @ApiOperation({ summary: 'Get recent health check logs and latency graph' })
+  async getSourceHealth(@Param('id') id: string) {
+    return this.sourcesService.getHealthHistory(id);
+  }
+
+  @Post('sources/:id/check')
+  @ApiOperation({ summary: 'Trigger an immediate on-demand check of the source' })
+  async checkSourceNow(@Param('id') id: string) {
+    return this.sourcesService.checkSourceNow(id);
+  }
+
+  // --- Source Discovery Candidates Endpoints ---
+
+  @Get('source-candidates')
+  @ApiOperation({ summary: 'List candidate sources discovered by crawler or independent search' })
+  async getCandidates() {
+    return this.sourcesService.listCandidates();
+  }
+
+  @Post('source-candidates/:id/approve')
+  @ApiOperation({ summary: 'Approve candidate source into active registered sources' })
+  async approveCandidate(@Param('id') id: string) {
+    return this.sourcesService.approveCandidate(id);
+  }
+
+  @Post('source-candidates/:id/ignore')
+  @ApiOperation({ summary: 'Ignore candidate source recommendation' })
+  async ignoreCandidate(@Param('id') id: string) {
+    return this.sourcesService.ignoreCandidate(id);
+  }
+
+  @Post('source-candidates/:id/block')
+  @ApiOperation({ summary: 'Block candidate source domain from future discovery' })
+  async blockCandidate(@Param('id') id: string) {
+    return this.sourcesService.blockCandidate(id);
+  }
+
+  // --- System Sources Telemetry ---
+
+  @Get('system/sources')
+  @ApiOperation({ summary: 'Aggregate source health and telemetry metrics' })
+  async getSystemSources() {
+    return this.sourcesService.getSystemTelemetry();
   }
 }

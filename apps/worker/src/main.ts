@@ -1,6 +1,7 @@
 import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '@edgi/database';
+import { processSourceCheckJob, SourceCheckJobData } from './source-processor';
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
@@ -24,87 +25,120 @@ async function bootstrap() {
     console.warn('⚠️ Redis not yet available. Retrying connection in background...');
   }
 
-  const queueName = 'heartbeat-queue';
-
-  // Create Queue
-  const heartbeatQueue = new Queue(queueName, {
+  // 1. Heartbeat Queue
+  const heartbeatQueueName = 'heartbeat-queue';
+  const heartbeatQueue = new Queue(heartbeatQueueName, {
     connection: redisConnection,
   });
 
-  // Schedule repeatable heartbeat job (every 60s) with 3 retries & exponential backoff
   try {
     await heartbeatQueue.add(
       'system-heartbeat',
       { initiatedAt: new Date().toISOString(), pid: process.pid },
       {
-        repeat: {
-          every: 60000,
-        },
+        repeat: { every: 60000 },
         attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
-        },
+        backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: 100,
         removeOnFail: 50,
       },
     );
-    console.log('⏱️ Repeatable heartbeat job scheduled (every 60s with exponential backoff).');
+    console.log('⏱️ Repeatable heartbeat job scheduled.');
   } catch (e) {
-    console.warn('Could not schedule repeatable job immediately (Redis may be offline):', (e as Error).message);
+    console.warn('Could not schedule heartbeat job:', (e as Error).message);
   }
 
-  // Create Worker Processor
-  const worker = new Worker(
-    queueName,
+  const heartbeatWorker = new Worker(
+    heartbeatQueueName,
     async (job: Job) => {
       const startedAt = new Date();
-      console.log(`[Worker] Processing Heartbeat Job #${job.id} (attempt ${job.attemptsMade + 1})...`);
-
-      // Write execution record to processing_jobs table to prove persistence loop
       try {
         await prisma.processingJob.create({
           data: {
-            queueName,
+            queueName: heartbeatQueueName,
             jobId: String(job.id || 'hb-' + Date.now()),
             jobType: 'heartbeat',
-            payload: {
-              timestamp: startedAt.toISOString(),
-              workerPid: process.pid,
-              data: job.data,
-            },
+            payload: { timestamp: startedAt.toISOString(), pid: process.pid },
             status: 'completed',
             attempts: job.attemptsMade + 1,
             startedAt,
             finishedAt: new Date(),
           },
         });
-        console.log(`[Worker Heartbeat] Pulse processed and persisted to DB (Job ID: ${job.id})`);
-      } catch (dbErr) {
-        console.warn('[Worker] Could not write heartbeat to DB (DB may be offline):', (dbErr as Error).message);
-      }
-
+      } catch {}
       return { status: 'healthy', timestamp: new Date().toISOString() };
+    },
+    { connection: redisConnection, concurrency: 2 }
+  );
+
+  // 2. Source Polling Queue
+  const sourceQueueName = 'source-polling-queue';
+  const sourceQueue = new Queue<SourceCheckJobData>(sourceQueueName, {
+    connection: redisConnection,
+  });
+
+  const sourceWorker = new Worker<SourceCheckJobData>(
+    sourceQueueName,
+    async (job: Job<SourceCheckJobData>) => {
+      return processSourceCheckJob(job);
     },
     {
       connection: redisConnection,
       concurrency: Number(process.env.WORKER_CONCURRENCY) || 5,
-    },
+    }
   );
 
-  worker.on('completed', (job) => {
-    console.log(`✨ Heartbeat job #${job.id} completed successfully.`);
+  sourceWorker.on('completed', (job) => {
+    console.log(`✨ Source check job #${job.id} for source ${job.data.sourceId} finished.`);
   });
 
-  worker.on('failed', (job, err) => {
-    console.error(`❌ Heartbeat job #${job?.id} failed:`, err.message);
+  sourceWorker.on('failed', (job, err) => {
+    console.error(`❌ Source check job #${job?.id} failed:`, err.message);
   });
+
+  // 3. Scheduler: checks for due sources every 60 seconds
+  const scheduleSourceChecks = async () => {
+    try {
+      const now = new Date();
+      const dueSources = await prisma.source.findMany({
+        where: {
+          status: { in: ['active', 'active_limited'] },
+          OR: [
+            { nextCheckAt: null },
+            { nextCheckAt: { lte: now } },
+          ],
+        },
+        take: 10,
+      });
+
+      for (const source of dueSources) {
+        await sourceQueue.add(
+          `check-${source.id}`,
+          { sourceId: source.id, triggeredBy: 'scheduler' },
+          {
+            jobId: `poll-${source.id}-${Math.floor(now.getTime() / 60000)}`,
+            removeOnComplete: 50,
+            removeOnFail: 20,
+          }
+        );
+      }
+    } catch (err) {
+      // Database might be booting or busy
+    }
+  };
+
+  const schedulerInterval = setInterval(scheduleSourceChecks, 60000);
+  // Run an initial sweep after 5 seconds
+  setTimeout(scheduleSourceChecks, 5000);
 
   // Graceful shutdown
   const shutdown = async () => {
-    console.log('🛑 Shutting down worker gracefully...');
-    await worker.close();
+    console.log('🛑 Shutting down workers gracefully...');
+    clearInterval(schedulerInterval);
+    await heartbeatWorker.close();
+    await sourceWorker.close();
     await heartbeatQueue.close();
+    await sourceQueue.close();
     redisConnection.disconnect();
     await prisma.$disconnect();
     process.exit(0);
@@ -113,7 +147,7 @@ async function bootstrap() {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
-  console.log('🚀 Edgi Background Worker initialized and listening for jobs.');
+  console.log('🚀 Edgi Background Worker & Source Polling Scheduler initialized.');
 }
 
 bootstrap().catch((err) => {

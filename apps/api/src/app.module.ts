@@ -8,6 +8,7 @@ import { PreferencesModule } from './modules/preferences/preferences.module';
 import { SystemModule } from './modules/system/system.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { SourcesModule } from './modules/sources/sources.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 
@@ -25,6 +26,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     SystemModule,
     OpportunitiesModule,
     SourcesModule,
+    OrganizationsModule,
     ApplicationsModule,
     NotificationsModule,
   ],

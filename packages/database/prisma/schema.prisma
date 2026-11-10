@@ -117,6 +117,12 @@ model Source {
   capabilities         Json                 @default("{}")
   health               Json                 @default("{}")
   config               Json                 @default("{}")
+  checkInterval        String               @default("normal") @map("check_interval") // high_value, normal, low_value, weekly
+  lastCheckedAt        DateTime?            @map("last_checked_at")
+  lastSuccessfulCheck  DateTime?            @map("last_successful_check")
+  nextCheckAt          DateTime?            @map("next_check_at")
+  consecutiveFailures  Int                  @default(0) @map("consecutive_failures")
+  lastErrorMessage     String?              @map("last_error_message") @db.Text
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
 
@@ -124,9 +130,13 @@ model Source {
   discoveredContents   DiscoveredContent[]
   opportunitySources   OpportunitySource[]
   contentEvidences     ContentEvidence[]
+  healthChecks         SourceHealthCheck[]
+  collectionRuns       CollectionRun[]
+  credentials          SourceCredential[]
 
   @@index([connectorType])
   @@index([status])
+  @@index([nextCheckAt])
   @@map("sources")
 }
 
@@ -468,4 +478,98 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// 22. Source Health Checks (History of uptime, latency, and status codes)
+// -----------------------------------------------------------------------------
+model SourceHealthCheck {
+  id             String   @id @default(uuid()) @db.Uuid
+  sourceId       String   @map("source_id") @db.Uuid
+  status         String   // healthy, degraded, unreachable
+  statusCode     Int?     @map("status_code")
+  responseTimeMs Int?     @map("response_time_ms")
+  errorMessage   String?  @map("error_message") @db.Text
+  checkedAt      DateTime @default(now()) @map("checked_at")
+
+  source         Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([checkedAt])
+  @@map("source_health_checks")
+}
+
+// -----------------------------------------------------------------------------
+// 23. Collection Runs (Audit ledger for source checks and content ingest)
+// -----------------------------------------------------------------------------
+model CollectionRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  sourceId     String    @map("source_id") @db.Uuid
+  jobId        String?   @map("job_id")
+  status       String    @default("running") // running, completed, failed
+  itemsFound   Int       @default(0) @map("items_found")
+  itemsNew     Int       @default(0) @map("items_new")
+  errorMessage String?   @map("error_message") @db.Text
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+
+  source       Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([startedAt])
+  @@map("collection_runs")
+}
+
+// -----------------------------------------------------------------------------
+// 24. Source Discovery Candidates (Queue of candidate sources for approval)
+// -----------------------------------------------------------------------------
+model SourceCandidate {
+  id                String    @id @default(uuid()) @db.Uuid
+  url               String    @unique
+  name              String
+  organizationName  String?   @map("organization_name")
+  connectorType     String    @map("connector_type")
+  discoveryReason   String    @map("discovery_reason") @db.Text
+  credibilityScore  Float     @default(0.5) @map("credibility_score")
+  status            String    @default("recommended") // discovered, evaluated, recommended, approved, ignored, blocked
+  suggestedSchedule String    @default("normal") @map("suggested_schedule") // high_value, normal, low_value
+  metadata          Json      @default("{}")
+  discoveredAt      DateTime  @default(now()) @map("discovered_at")
+  reviewedAt        DateTime? @map("reviewed_at")
+
+  @@index([status])
+  @@index([discoveredAt])
+  @@map("source_discovery_candidates")
+}
+
+// -----------------------------------------------------------------------------
+// 25. Source Credentials (Encrypted tokens for authenticated sources e.g. GitHub)
+// -----------------------------------------------------------------------------
+model SourceCredential {
+  id             String   @id @default(uuid()) @db.Uuid
+  sourceId       String   @map("source_id") @db.Uuid
+  keyType        String   @map("key_type") // bearer_token, api_key, basic_auth
+  encryptedValue String   @map("encrypted_value") @db.Text
+  iv             String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  source         Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@map("source_credentials")
+}
+
+// -----------------------------------------------------------------------------
+// 26. Source Auto-Trust Rules (Rules to automatically approve trusted candidate domains)
+// -----------------------------------------------------------------------------
+model SourceAutoTrustRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  pattern   String   @unique // e.g. *.gov, *.edu, github.com/*
+  ruleType  String   @map("rule_type") // domain_pattern, regex, keyword
+  action    String   @default("auto_approve") // auto_approve, flag_high_priority
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("source_auto_trust_rules")
 }

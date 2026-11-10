@@ -194,25 +194,177 @@ export const api = {
     return res.json();
   },
 
+  async evaluateSource(url: string) {
+    if (API_MODE === 'mock') {
+      const lower = url.toLowerCase();
+      if (lower.includes('linkedin.com') || lower.includes('instagram.com') || lower.includes('t.me') || lower.includes('x.com')) {
+        return {
+          url,
+          detectedType: 'manual_capture',
+          name: 'Social Bookmark',
+          proposedMethod: 'Manual Capture Bookmark (Browser Extension / Paste)',
+          capabilities: { canSearch: false, canPaginate: false, rateLimitPerMin: 0, requiresAuth: false, isRealTime: false },
+          restrictions: ['Platform ToS strictly restricts automated scraping.', 'Requires share-to-app or manual text paste.'],
+          suggestedSchedule: 'weekly',
+        };
+      }
+      if (lower.includes('github.com')) {
+        return {
+          url,
+          detectedType: 'github',
+          name: 'GitHub Source',
+          proposedMethod: 'Official GitHub REST API (v3) - Repos & Releases',
+          capabilities: { canSearch: true, canPaginate: true, rateLimitPerMin: 60, requiresAuth: false, isRealTime: false },
+          restrictions: ['Unauthenticated calls rate-limited to 60 req/hr.'],
+          suggestedSchedule: 'normal',
+        };
+      }
+      if (lower.endsWith('.xml') || lower.includes('feed') || lower.includes('rss')) {
+        return {
+          url,
+          detectedType: 'rss_feed',
+          name: 'Syndicated Feed',
+          proposedMethod: 'Syndicated XML Feed Polling (RSS 2.0 / Atom 1.0)',
+          capabilities: { canSearch: false, canPaginate: false, rateLimitPerMin: 60, requiresAuth: false, isRealTime: false },
+          suggestedSchedule: 'high_value',
+        };
+      }
+      return {
+        url,
+        detectedType: 'website',
+        name: 'Target Website',
+        proposedMethod: 'Focused Website Crawler (Cheerio + robots.txt compliance)',
+        capabilities: { canSearch: false, canPaginate: true, rateLimitPerMin: 20, requiresAuth: false, isRealTime: false },
+        restrictions: ['Limited to same-domain paths (/careers, /grants, etc.)'],
+        suggestedSchedule: 'normal',
+      };
+    }
+
+    const res = await fetch(`${API_URL}/sources/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to evaluate URL');
+    }
+    return res.json();
+  },
+
+  async createSource(dto: { name: string; url: string; connectorType?: string; checkInterval?: string }): Promise<Source> {
+    if (API_MODE === 'mock') {
+      const evalResult = await this.evaluateSource(dto.url);
+      const newSource: Source = {
+        id: `src-${Date.now()}`,
+        name: dto.name,
+        slug: dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        url: dto.url,
+        connectorType: (dto.connectorType || evalResult.detectedType) as any,
+        status: evalResult.detectedType === 'manual_capture' ? 'manual_capture_only' : 'active',
+        capabilities: evalResult.capabilities as any,
+        health: {
+          lastSuccessfulCheck: null,
+          nextCheck: new Date(Date.now() + 3600000).toISOString(),
+          lastError: null,
+          consecutiveFailures: 0,
+          latencyMs: null,
+          totalItemsDiscovered: 0,
+        },
+        config: {},
+        createdAt: new Date().toISOString(),
+      };
+      inMemorySources.unshift(newSource);
+      return newSource;
+    }
+
+    const res = await fetch(`${API_URL}/sources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dto),
+    });
+    if (!res.ok) throw new Error('Failed to create source');
+    return res.json();
+  },
+
+  async checkSourceNow(id: string): Promise<{ success: boolean; itemsFound: number; itemsNew: number; errorMessage?: string }> {
+    if (API_MODE === 'mock') {
+      const idx = inMemorySources.findIndex((s) => s.id === id);
+      if (idx !== -1) {
+        const source = inMemorySources[idx]!;
+        // Force failure behavior if url contains 'fail' or is defsec
+        if (source.url.includes('fail') || source.name.includes('DefSec')) {
+          source.status = 'unavailable';
+          source.health.consecutiveFailures += 1;
+          source.health.lastError = 'HTTP 502 Bad Gateway: Host unreachable';
+          return {
+            success: false,
+            itemsFound: 0,
+            itemsNew: 0,
+            errorMessage: 'HTTP 502 Bad Gateway: Host unreachable',
+          };
+        }
+
+        source.status = 'active';
+        source.health.lastSuccessfulCheck = new Date().toISOString();
+        source.health.consecutiveFailures = 0;
+        source.health.lastError = null;
+        source.health.totalItemsDiscovered += 2;
+        return { success: true, itemsFound: 4, itemsNew: 2 };
+      }
+      throw new Error('Source not found');
+    }
+
+    const res = await fetch(`${API_URL}/sources/${id}/check`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to trigger source check');
+    return res.json();
+  },
+
   async getCandidateSources(): Promise<CandidateSource[]> {
     if (API_MODE === 'mock') {
       return [...inMemoryCandidateSources];
     }
-    const res = await fetch(`${API_URL}/sources/candidates`);
+    const res = await fetch(`${API_URL}/source-candidates`);
     if (!res.ok) throw new Error('Failed to fetch candidate sources');
     return res.json();
   },
 
-  async updateCandidateStatus(id: string, status: 'approved' | 'ignored' | 'blocked'): Promise<void> {
+  async approveCandidate(id: string): Promise<void> {
     if (API_MODE === 'mock') {
-      inMemoryCandidateSources = inMemoryCandidateSources.map((c) => (c.id === id ? { ...c, status } : c));
+      const candidate = inMemoryCandidateSources.find((c) => c.id === id);
+      if (candidate) {
+        candidate.status = 'approved';
+        await this.createSource({
+          name: candidate.name,
+          url: candidate.url,
+          connectorType: candidate.connectorType,
+        });
+      }
       return;
     }
-    await fetch(`${API_URL}/sources/candidates/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
+    await fetch(`${API_URL}/source-candidates/${id}/approve`, { method: 'POST' });
+  },
+
+  async ignoreCandidate(id: string): Promise<void> {
+    if (API_MODE === 'mock') {
+      inMemoryCandidateSources = inMemoryCandidateSources.map((c) => (c.id === id ? { ...c, status: 'ignored' } : c));
+      return;
+    }
+    await fetch(`${API_URL}/source-candidates/${id}/ignore`, { method: 'POST' });
+  },
+
+  async blockCandidate(id: string): Promise<void> {
+    if (API_MODE === 'mock') {
+      inMemoryCandidateSources = inMemoryCandidateSources.map((c) => (c.id === id ? { ...c, status: 'blocked' } : c));
+      return;
+    }
+    await fetch(`${API_URL}/source-candidates/${id}/block`, { method: 'POST' });
+  },
+
+  async updateCandidateStatus(id: string, status: 'approved' | 'ignored' | 'blocked'): Promise<void> {
+    if (status === 'approved') return this.approveCandidate(id);
+    if (status === 'ignored') return this.ignoreCandidate(id);
+    if (status === 'blocked') return this.blockCandidate(id);
   },
 
   // 4. Notifications
