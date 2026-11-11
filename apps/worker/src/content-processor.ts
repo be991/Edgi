@@ -5,6 +5,7 @@ import {
   ExistingOpportunityCandidate,
   PipelineProcessResult,
 } from '@edgi/processing';
+import { calculateOpportunityMatch } from './match-processor';
 
 export interface ContentProcessingJobData {
   discoveredContentId: string;
@@ -235,6 +236,13 @@ export async function processContentJob(job: Job<ContentProcessingJobData>) {
       reason: 'Canonical opportunity created from raw ingest content.',
     },
   });
+
+  // Automatically trigger Phase 5 personal intelligence match assessment
+  try {
+    await calculateOpportunityMatch(opportunity.id);
+  } catch (err: any) {
+    console.warn(`[Content Processor] Failed to evaluate personal match for ${opportunity.id}:`, err?.message);
+  }
 
   return {
     status: 'created',

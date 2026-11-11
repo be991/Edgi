@@ -24,6 +24,8 @@ model User {
   notifications          Notification[]
   notificationPreferences NotificationPreference[]
   opportunityMatches     OpportunityMatch[]
+  eligibilityAssessments EligibilityAssessment[]
+  userFeedbacks          UserFeedback[]
 
   @@map("users")
 }
@@ -177,6 +179,8 @@ model Opportunity {
   statusHistory        OpportunityStatusHistory[]
   savedBy              SavedOpportunity[]
   applications         Application[]
+  eligibilityAssessments EligibilityAssessment[]
+  userFeedbacks        UserFeedback[]
 
   @@index([category])
   @@index([verificationStatus])
@@ -678,3 +682,46 @@ model ProcessingReviewItem {
   @@index([createdAt])
   @@map("processing_review_items")
 }
+
+// -----------------------------------------------------------------------------
+// 32. Eligibility Assessments (Requirement-by-requirement personal evaluations)
+// -----------------------------------------------------------------------------
+model EligibilityAssessment {
+  id              String      @id @default(uuid()) @db.Uuid
+  opportunityId   String      @map("opportunity_id") @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  status          String      @map("status") // eligible, likely_eligible, possibly_eligible, ineligible, unknown
+  reasons         String[]    @default([])
+  blockers        String[]    @default([])
+  missingInfo     String[]    @default([]) @map("missing_info")
+  criteriaResults Json        @default("[]") @map("criteria_results")
+  evaluatedAt     DateTime    @default(now()) @map("evaluated_at")
+  engineVersion   String      @default("v1.0") @map("engine_version")
+
+  opportunity     Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, userId])
+  @@index([userId, status])
+  @@map("eligibility_assessments")
+}
+
+// -----------------------------------------------------------------------------
+// 33. User Feedback & Learned Adjustments
+// -----------------------------------------------------------------------------
+model UserFeedback {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  action        String      // save, apply, thumbs_up, thumbs_down, dismiss
+  reason        String?
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([userId, action])
+  @@map("user_feedback")
+}
+

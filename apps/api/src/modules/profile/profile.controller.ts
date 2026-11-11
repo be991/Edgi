@@ -18,6 +18,12 @@ export class ProfileController {
     return this.profileService.getProfile(user.id);
   }
 
+  @Get('completeness')
+  @ApiOperation({ summary: 'Get profile completeness meter and missing field impacts' })
+  async getCompleteness(@CurrentUser() user: AuthenticatedUser) {
+    return this.profileService.getCompleteness(user.id);
+  }
+
   @Put()
   @ApiOperation({ summary: 'Update current user profile' })
   async updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() body: UpdateUserProfile) {

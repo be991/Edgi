@@ -33,6 +33,25 @@ let inMemoryPreferences = { ...mockUserPreferences };
 let inMemoryNotifications = [...mockNotifications];
 let inMemoryBudget = { ...mockUsageBudget };
 
+let inMemoryWeights = {
+  category: 0.25,
+  skills: 0.20,
+  education: 0.15,
+  geography: 0.15,
+  benefits: 0.10,
+  organization: 0.10,
+  timing: 0.05,
+};
+let inMemoryDeltas: Record<string, number> = {
+  category: 0,
+  skills: 0,
+  education: 0,
+  geography: 0,
+  benefits: 0,
+  organization: 0,
+  timing: 0,
+};
+
 export const api = {
   isMockMode: () => API_MODE === 'mock',
 
@@ -93,13 +112,238 @@ export const api = {
   },
 
   async getRecommendedOpportunities(): Promise<Opportunity[]> {
+    const res = await this.getRecommended();
+    return res.opportunities;
+  },
+
+  async getRecommended(params?: {
+    tab?: string;
+    openToNigeria?: boolean;
+    category?: string;
+  }): Promise<{
+    opportunities: Opportunity[];
+    total: number;
+    tabCounts: { all: number; top: number; verify_first: number; ineligible: number };
+  }> {
     if (API_MODE === 'mock') {
-      return inMemoryOpportunities
-        .filter((o) => (o.relevanceScore ?? 0) >= 80 && o.verificationStatus !== 'expired')
-        .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
+      let filtered = [...inMemoryOpportunities];
+
+      const tabCounts = {
+        all: inMemoryOpportunities.length,
+        top: inMemoryOpportunities.filter((o) =>
+          ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus || '')
+        ).length,
+        verify_first: inMemoryOpportunities.filter((o) => o.eligibilityStatus === 'unknown').length,
+        ineligible: inMemoryOpportunities.filter((o) => o.eligibilityStatus === 'ineligible').length,
+      };
+
+      if (params?.tab === 'top') {
+        filtered = filtered.filter((o) =>
+          ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus || '')
+        );
+      } else if (params?.tab === 'verify_first') {
+        filtered = filtered.filter((o) => o.eligibilityStatus === 'unknown');
+      } else if (params?.tab === 'ineligible') {
+        filtered = filtered.filter((o) => o.eligibilityStatus === 'ineligible');
+      }
+
+      if (params?.openToNigeria) {
+        filtered = filtered.filter((o) => o.isOpenToNigeria);
+      }
+
+      if (params?.category) {
+        filtered = filtered.filter((o) => o.category === params.category);
+      }
+
+      filtered.sort((a, b) => (b.priority ?? b.relevanceScore ?? 0) - (a.priority ?? a.relevanceScore ?? 0));
+
+      return {
+        opportunities: filtered,
+        total: filtered.length,
+        tabCounts,
+      };
     }
-    const res = await fetch(`${API_URL}/opportunities/recommended`);
+
+    const query = new URLSearchParams();
+    if (params?.tab) query.set('tab', params.tab);
+    if (params?.openToNigeria) query.set('openToNigeria', 'true');
+    if (params?.category) query.set('category', params.category);
+
+    const res = await fetch(`${API_URL}/opportunities/recommended?${query.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch recommended opportunities');
+    return res.json();
+  },
+
+  async getEligibilityAssessment(opportunityId: string): Promise<any> {
+    if (API_MODE === 'mock') {
+      const opp = inMemoryOpportunities.find((o) => o.id === opportunityId || o.slug === opportunityId);
+      return opp?.eligibilityAssessment || null;
+    }
+    const res = await fetch(`${API_URL}/opportunities/${opportunityId}/eligibility`);
+    if (!res.ok) return null;
+    return res.json();
+  },
+
+  async submitFeedback(
+    opportunityId: string,
+    action: 'save' | 'apply' | 'thumbs_up' | 'thumbs_down' | 'dismiss',
+    reason?: string,
+    notes?: string
+  ): Promise<{ success: boolean; deltas: Record<string, number>; currentWeights: any }> {
+    if (API_MODE === 'mock') {
+      // Bounded learning logic in mock
+      if (action === 'save' || action === 'apply') {
+        inMemoryDeltas.category = Math.min(0.05, (inMemoryDeltas.category || 0) + 0.01);
+        inMemoryDeltas.skills = Math.min(0.05, (inMemoryDeltas.skills || 0) + 0.01);
+      } else if (action === 'thumbs_up') {
+        inMemoryDeltas.skills = Math.min(0.05, (inMemoryDeltas.skills || 0) + 0.02);
+        inMemoryDeltas.organization = Math.min(0.05, (inMemoryDeltas.organization || 0) + 0.01);
+      } else if (action === 'dismiss' || action === 'thumbs_down') {
+        if (reason === 'unpaid') {
+          inMemoryDeltas.benefits = Math.min(0.05, (inMemoryDeltas.benefits || 0) + 0.02);
+        } else if (reason === 'too_senior') {
+          inMemoryDeltas.education = Math.min(0.05, (inMemoryDeltas.education || 0) + 0.02);
+        } else {
+          inMemoryDeltas.category = Math.max(-0.05, (inMemoryDeltas.category || 0) - 0.01);
+        }
+      }
+
+      // Recompute normalized weights
+      const raw = {
+        category: 0.25 + (inMemoryDeltas.category || 0),
+        skills: 0.20 + (inMemoryDeltas.skills || 0),
+        education: 0.15 + (inMemoryDeltas.education || 0),
+        geography: 0.15 + (inMemoryDeltas.geography || 0),
+        benefits: 0.10 + (inMemoryDeltas.benefits || 0),
+        organization: 0.10 + (inMemoryDeltas.organization || 0),
+        timing: 0.05 + (inMemoryDeltas.timing || 0),
+      };
+      const sum = Object.values(raw).reduce((a, b) => a + b, 0);
+      inMemoryWeights = {
+        category: Number((raw.category / sum).toFixed(4)),
+        skills: Number((raw.skills / sum).toFixed(4)),
+        education: Number((raw.education / sum).toFixed(4)),
+        geography: Number((raw.geography / sum).toFixed(4)),
+        benefits: Number((raw.benefits / sum).toFixed(4)),
+        organization: Number((raw.organization / sum).toFixed(4)),
+        timing: Number((raw.timing / sum).toFixed(4)),
+      };
+
+      if (action === 'dismiss') {
+        inMemoryOpportunities = inMemoryOpportunities.filter((o) => o.id !== opportunityId);
+      }
+
+      return {
+        success: true,
+        deltas: { ...inMemoryDeltas },
+        currentWeights: { ...inMemoryWeights },
+      };
+    }
+
+    const res = await fetch(`${API_URL}/opportunities/${opportunityId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, reason, notes }),
+    });
+    if (!res.ok) throw new Error('Failed to submit feedback');
+    return res.json();
+  },
+
+  async getScoringWeights(): Promise<{
+    weights: Record<string, number>;
+    defaults: Record<string, number>;
+    deltas: Record<string, number>;
+    bounds: Record<string, [number, number]>;
+  }> {
+    if (API_MODE === 'mock') {
+      return {
+        weights: { ...inMemoryWeights },
+        defaults: {
+          category: 0.25,
+          skills: 0.20,
+          education: 0.15,
+          geography: 0.15,
+          benefits: 0.10,
+          organization: 0.10,
+          timing: 0.05,
+        },
+        deltas: { ...inMemoryDeltas },
+        bounds: {
+          category: [0.20, 0.30],
+          skills: [0.15, 0.25],
+          education: [0.10, 0.20],
+          geography: [0.10, 0.20],
+          benefits: [0.05, 0.15],
+          organization: [0.05, 0.15],
+          timing: [0.00, 0.10],
+        },
+      };
+    }
+
+    const res = await fetch(`${API_URL}/opportunities/weights`);
+    if (!res.ok) throw new Error('Failed to fetch weights');
+    return res.json();
+  },
+
+  async resetScoringWeights(): Promise<{ success: boolean; weights: Record<string, number> }> {
+    if (API_MODE === 'mock') {
+      inMemoryDeltas = {
+        category: 0,
+        skills: 0,
+        education: 0,
+        geography: 0,
+        benefits: 0,
+        organization: 0,
+        timing: 0,
+      };
+      inMemoryWeights = {
+        category: 0.25,
+        skills: 0.20,
+        education: 0.15,
+        geography: 0.15,
+        benefits: 0.10,
+        organization: 0.10,
+        timing: 0.05,
+      };
+      return { success: true, weights: { ...inMemoryWeights } };
+    }
+
+    const res = await fetch(`${API_URL}/opportunities/weights/reset`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to reset weights');
+    return res.json();
+  },
+
+  async getProfileCompleteness(): Promise<{
+    score: number;
+    percentage: number;
+    completedFields: string[];
+    missingFields: string[];
+    missingImpactNotes: string[];
+  }> {
+    if (API_MODE === 'mock') {
+      return {
+        score: 90,
+        percentage: 90,
+        completedFields: [
+          'fullName',
+          'degree',
+          'major',
+          'yearOfStudy',
+          'university',
+          'country',
+          'nationality',
+          'skills',
+          'targetRoles',
+        ],
+        missingFields: ['graduationYear'],
+        missingImpactNotes: [
+          'Missing explicit graduation year (e.g. 2028). Opportunities with strict cohort graduation criteria will evaluate to "unknown".',
+        ],
+      };
+    }
+
+    const res = await fetch(`${API_URL}/opportunities/profile/completeness`);
+    if (!res.ok) throw new Error('Failed to fetch profile completeness');
     return res.json();
   },
 

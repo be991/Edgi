@@ -13,6 +13,12 @@ import {
   GraduationCap,
   Globe,
   Link as LinkIcon,
+  RefreshCw,
+  Sparkles,
+  RotateCcw,
+  AlertTriangle,
+  ShieldCheck,
+  HelpCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { UserProfile, UserPreferences, OpportunityCategory } from '@edgi/contracts';
@@ -33,28 +39,50 @@ const ALL_CATEGORIES: { label: string; value: OpportunityCategory }[] = [
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [completenessData, setCompletenessData] = useState<any>(null);
+  const [weightsData, setWeightsData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [resetStatus, setResetStatus] = useState<string | null>(null);
 
   // Skill input
   const [newSkill, setNewSkill] = useState('');
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [p, pref] = await Promise.all([
-          api.getUserProfile(),
-          api.getUserPreferences(),
-        ]);
-        setProfile(p);
-        setPreferences(pref);
-      } finally {
-        setIsLoading(false);
-      }
+  const loadData = async () => {
+    try {
+      const [p, pref, comp, w] = await Promise.all([
+        api.getUserProfile(),
+        api.getUserPreferences(),
+        api.getProfileCompleteness(),
+        api.getScoringWeights(),
+      ]);
+      setProfile(p);
+      setPreferences(pref);
+      setCompletenessData(comp);
+      setWeightsData(w);
+    } catch (err) {
+      console.error('Failed to load profile intelligence data:', err);
+    } finally {
+      setIsLoading(false);
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
+
+  const handleResetWeights = async () => {
+    try {
+      await api.resetScoringWeights();
+      const w = await api.getScoringWeights();
+      setWeightsData(w);
+      setResetStatus('Learned weights successfully reset to baseline.');
+      setTimeout(() => setResetStatus(null), 3500);
+    } catch (err) {
+      console.error('Failed to reset weights:', err);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +155,62 @@ export default function ProfilePage() {
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
           <span className="font-semibold">Profile and preferences saved successfully!</span>
+        </div>
+      )}
+
+      {/* Profile Completeness Meter */}
+      {completenessData && (
+        <div className="rounded-2xl border border-primary/20 bg-card p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-foreground">
+                  Profile Completeness: {completenessData.percentage}%
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Missing fields prevent automated verification and cause assessments to evaluate to &quot;Unknown&quot;.
+                </p>
+              </div>
+            </div>
+
+            <Badge
+              variant={completenessData.percentage >= 90 ? 'success' : 'warning'}
+              className="text-xs px-2.5 py-1 font-bold"
+            >
+              {completenessData.percentage >= 90 ? 'High Completeness' : 'Needs Information'}
+            </Badge>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-500"
+                style={{ width: `${completenessData.percentage}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[11px] text-muted-foreground">
+              <span>{completenessData.completedFields?.length || 9} fields verified</span>
+              <span>{completenessData.missingFields?.length || 1} fields missing</span>
+            </div>
+          </div>
+
+          {/* Impact Warning Alerts */}
+          {completenessData.missingImpactNotes && completenessData.missingImpactNotes.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2 text-xs">
+              <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                Missing Fields Impact on Matching:
+              </span>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground text-[11px]">
+                {completenessData.missingImpactNotes.map((note: string, idx: number) => (
+                  <li key={idx}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -374,6 +458,89 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Section 4: Learned Matching Weights Inspector (Strictly Bounded +/- 5%) */}
+      {weightsData && (
+        <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-primary" />
+              <div>
+                <h2 className="text-base font-bold text-foreground">
+                  Learned Scoring Weights &amp; Bounded Feedback Inspector
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Scoring weights automatically adapt from your feedback within a strict &plusmn;5% bounding box.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleResetWeights}
+              className="gap-1.5 text-xs hover:border-rose-500/40 hover:text-rose-600"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Learned Adjustments</span>
+            </Button>
+          </div>
+
+          {resetStatus && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{resetStatus}</span>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="py-2.5 px-3 font-semibold">Dimension</th>
+                  <th className="py-2.5 px-3 font-semibold">Default Baseline</th>
+                  <th className="py-2.5 px-3 font-semibold">Learned Delta</th>
+                  <th className="py-2.5 px-3 font-semibold">Strict Bounds</th>
+                  <th className="py-2.5 px-3 font-semibold">Effective Weight</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {Object.entries(weightsData.weights).map(([dimension, weight]) => {
+                  const numWeight = weight as number;
+                  const def = (weightsData.defaults?.[dimension] ?? numWeight) as number;
+                  const delta = (weightsData.deltas?.[dimension] ?? 0) as number;
+                  const bound = weightsData.bounds?.[dimension] || [0.05, 0.35];
+
+                  return (
+                    <tr key={dimension} className="hover:bg-muted/20">
+                      <td className="py-2.5 px-3 font-semibold capitalize text-foreground">{dimension}</td>
+                      <td className="py-2.5 px-3 text-muted-foreground font-mono">{(def * 100).toFixed(0)}%</td>
+                      <td className="py-2.5 px-3 font-mono">
+                        {delta > 0 ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                            +{(delta * 100).toFixed(1)}%
+                          </span>
+                        ) : delta < 0 ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-bold">
+                            {(delta * 100).toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">0.0%</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-muted-foreground font-mono text-[11px]">
+                        [{(bound[0] * 100).toFixed(0)}% – {(bound[1] * 100).toFixed(0)}%]
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-foreground font-mono">{(numWeight * 100).toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end pt-2">
         <Button type="submit" disabled={isSaving} className="gap-2 text-xs">

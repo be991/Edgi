@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { UserProfile, UpdateUserProfile } from '@edgi/contracts';
+import { ProfileCompletenessMeter, EvaluatorUserProfile } from '@edgi/intelligence';
 
 @Injectable()
 export class ProfileService {
@@ -147,5 +148,29 @@ export class ProfileService {
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     };
+  }
+
+  async getCompleteness(userId: string) {
+    const profile = await this.getProfile(userId);
+    const meter = new ProfileCompletenessMeter();
+    let gradYear: number | null = null;
+    const gradMatch = (profile.yearOfStudy || '').match(/\b(202[4-9]|203[0-5])\b/);
+    if (gradMatch) gradYear = parseInt(gradMatch[1], 10);
+
+    const evalProfile: EvaluatorUserProfile = {
+      id: profile.userId,
+      fullName: profile.fullName,
+      degree: profile.degree,
+      major: profile.major,
+      yearOfStudy: profile.yearOfStudy,
+      university: profile.university,
+      country: profile.country,
+      graduationYear: gradYear,
+      skills: profile.skills,
+      targetRoles: profile.targetRoles,
+      interests: profile.interests,
+    };
+
+    return meter.calculate(evalProfile);
   }
 }

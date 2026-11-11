@@ -4,6 +4,7 @@ import { prisma } from '@edgi/database';
 import { processSourceCheckJob, SourceCheckJobData } from './source-processor';
 import { processDiscoveryJob, DiscoveryJobData } from './discovery-processor';
 import { processContentJob, ContentProcessingJobData, runReverificationSweep } from './content-processor';
+import { processMatchJob, MatchJobData } from './match-processor';
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
@@ -148,7 +149,32 @@ async function bootstrap() {
     console.error(`❌ Content processing job #${job?.id} failed:`, err.message);
   });
 
-  // 5. Scheduler: checks for due sources every 60 seconds
+  // 5. Personal Intelligence Match Calculation Queue (Phase 5)
+  const matchQueueName = 'match-calculation-queue';
+  const matchQueue = new Queue<MatchJobData>(matchQueueName, {
+    connection: redisConnection,
+  });
+
+  const matchWorker = new Worker<MatchJobData>(
+    matchQueueName,
+    async (job: Job<MatchJobData>) => {
+      return processMatchJob(job);
+    },
+    {
+      connection: redisConnection,
+      concurrency: 3,
+    }
+  );
+
+  matchWorker.on('completed', (job) => {
+    console.log(`✨ Match assessment job #${job.id} completed.`);
+  });
+
+  matchWorker.on('failed', (job, err) => {
+    console.error(`❌ Match assessment job #${job?.id} failed:`, err.message);
+  });
+
+  // 6. Scheduler: checks for due sources every 60 seconds
   const scheduleSourceChecks = async () => {
     try {
       const now = new Date();
@@ -196,10 +222,12 @@ async function bootstrap() {
     await sourceWorker.close();
     await discoveryWorker.close();
     await processingWorker.close();
+    await matchWorker.close();
     await heartbeatQueue.close();
     await sourceQueue.close();
     await discoveryQueue.close();
     await processingQueue.close();
+    await matchQueue.close();
     redisConnection.disconnect();
     await prisma.$disconnect();
     process.exit(0);

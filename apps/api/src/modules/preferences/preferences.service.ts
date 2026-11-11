@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { UserPreferences, UpdateUserPreferences } from '@edgi/contracts';
+import { DEFAULT_WEIGHTS } from '@edgi/intelligence';
 
 @Injectable()
 export class PreferencesService {
@@ -114,6 +115,30 @@ export class PreferencesService {
       llmBudgetCap: updated.llmBudgetCap,
       bufferBudgetCap: updated.bufferBudgetCap,
       updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  getWeights() {
+    return {
+      weights: DEFAULT_WEIGHTS,
+      defaults: DEFAULT_WEIGHTS,
+      bounds: {
+        category: [0.20, 0.30],
+        skills: [0.15, 0.25],
+        education: [0.10, 0.20],
+        geography: [0.10, 0.20],
+        benefits: [0.05, 0.15],
+        organization: [0.05, 0.15],
+        timing: [0.00, 0.10],
+      },
+    };
+  }
+
+  resetWeights() {
+    return {
+      success: true,
+      weights: DEFAULT_WEIGHTS,
+      message: 'Learned scoring weights reset to baseline.',
     };
   }
 }

@@ -7,7 +7,7 @@ import {
 } from './enums';
 import { OrganizationSchema } from './organization';
 import { ContentEvidenceSchema } from './content';
-import { EligibilityAssessmentSchema } from './intelligence';
+import { EligibilityAssessmentSchema, RelevanceBreakdownSchema } from './intelligence';
 
 export const LocationSchema = z.object({
   country: z.string().nullable().optional(),
@@ -53,6 +53,9 @@ export const OpportunitySchema = z.object({
   relevanceScore: z.number().min(0).max(100).nullable().optional(),
   eligibilityStatus: EligibilityStatusSchema.nullable().optional(),
   eligibilityAssessment: EligibilityAssessmentSchema.nullable().optional(),
+  relevanceBreakdown: RelevanceBreakdownSchema.nullable().optional(),
+  priority: z.number().nullable().optional(),
+  isOpenToNigeria: z.boolean().default(false).optional(),
   matchExplanation: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

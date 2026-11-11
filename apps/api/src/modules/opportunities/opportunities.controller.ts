@@ -1,75 +1,70 @@
-import { Controller, Get, Post, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { PrismaService } from '../../prisma.service';
+import { OpportunitiesService } from './opportunities.service';
 
 @ApiTags('Opportunities')
 @Controller('opportunities')
 export class OpportunitiesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly service: OpportunitiesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List discovered opportunities' })
+  @ApiOperation({ summary: 'List opportunities with relevance and eligibility' })
   async getOpportunities(@Query() query: any) {
-    const opps = await this.prisma.opportunity.findMany({
-      include: {
-        organization: true,
-        evidences: { take: 5 },
-      },
-      take: 20,
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return {
-      opportunities: opps.map((o) => ({
-        id: o.id,
-        canonicalUrl: o.canonicalUrl,
-        title: o.title,
-        slug: o.slug,
-        summary: o.summary,
-        organization: o.organization,
-        category: o.category,
-        verificationStatus: o.verificationStatus,
-        confidence: o.confidence,
-        publishedAt: o.publishedAt?.toISOString() || null,
-        deadline: o.deadline?.toISOString() || null,
-        deadlineTz: o.deadlineTz,
-        isDeadlineEstimated: o.isDeadlineEstimated,
-        stipend: o.stipendMin
-          ? { min: o.stipendMin, max: o.stipendMax, currency: o.stipendCurrency, period: o.stipendPeriod }
-          : null,
-        locations: [{ country: 'Global', isRemote: true }],
-        benefits: [],
-        tags: ['Cyber Security', 'AppSec'],
-        applyUrl: o.applyUrl,
-        evidence: [],
-        relevanceScore: 90,
-        eligibilityStatus: 'eligible',
-        createdAt: o.createdAt.toISOString(),
-        updatedAt: o.updatedAt.toISOString(),
-      })),
-      total: opps.length,
-    };
+    return this.service.getRecommended(query);
   }
 
   @Get('recommended')
-  @ApiOperation({ summary: 'Get ranked recommended opportunities' })
-  async getRecommended() {
-    return [];
+  @ApiOperation({ summary: 'Get ranked recommended opportunities with dual assessments' })
+  async getRecommended(
+    @Query('tab') tab?: string,
+    @Query('openToNigeria') openToNigeria?: string,
+    @Query('category') category?: string
+  ) {
+    return this.service.getRecommended({ tab, openToNigeria, category });
+  }
+
+  @Get('weights')
+  @ApiOperation({ summary: 'Get learned ranking weights and bounds' })
+  getWeights() {
+    return this.service.getWeights();
+  }
+
+  @Post('weights/reset')
+  @ApiOperation({ summary: 'Reset learned ranking weights back to defaults' })
+  resetWeights() {
+    return this.service.resetWeights();
+  }
+
+  @Get('profile/completeness')
+  @ApiOperation({ summary: 'Get profile completeness meter and missing field impacts' })
+  getProfileCompleteness() {
+    return this.service.getProfileCompleteness();
   }
 
   @Get(':slug')
-  @ApiOperation({ summary: 'Get opportunity details by slug' })
+  @ApiOperation({ summary: 'Get opportunity details by slug or id' })
   async getOpportunity(@Param('slug') slug: string) {
-    const opp = await this.prisma.opportunity.findFirst({
-      where: { OR: [{ slug }, { id: slug }] },
-      include: { organization: true, evidences: true },
-    });
-    return opp || null;
+    return this.service.getOpportunity(slug);
+  }
+
+  @Get(':id/eligibility')
+  @ApiOperation({ summary: 'Get requirement-by-requirement eligibility audit table' })
+  async getEligibility(@Param('id') id: string) {
+    return this.service.getEligibilityAssessment(id);
+  }
+
+  @Post(':id/feedback')
+  @ApiOperation({ summary: 'Submit feedback (save, apply, thumbs_up, thumbs_down, dismiss)' })
+  async recordFeedback(
+    @Param('id') id: string,
+    @Body() body: { action: 'save' | 'apply' | 'thumbs_up' | 'thumbs_down' | 'dismiss'; reason?: string; notes?: string }
+  ) {
+    return this.service.recordFeedback(id, body.action, body.reason, body.notes);
   }
 
   @Post(':id/save')
   @ApiOperation({ summary: 'Toggle save bookmark' })
-  saveOpportunity(@Param('id') id: string) {
-    return { success: true };
+  async saveOpportunity(@Param('id') id: string) {
+    return this.service.recordFeedback(id, 'save');
   }
 }
