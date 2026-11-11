@@ -1,10 +1,14 @@
-import { Notification } from '@edgi/contracts';
+import { Notification, NotificationPreferences, NotificationDelivery } from '@edgi/contracts';
 
 export const mockNotifications: Notification[] = [
   {
     id: 'notif-001',
     userId: '00000000-0000-0000-0000-000000000001',
     type: 'priority_alert',
+    priority: 'immediate',
+    idempotencyKey: 'idemp:user1:priority_alert:opp1:inapp',
+    entityType: 'opportunity',
+    entityId: '11111111-1111-1111-1111-111111111111',
     title: 'New 96% Match: OpenSSF AppSec Fellowship',
     message: 'A new high-relevance fellowship matching your Cyber Security & AppSec skills was discovered and verified.',
     link: '/opportunities/openssf-global-appsec-fellowship-2027',
@@ -15,6 +19,10 @@ export const mockNotifications: Notification[] = [
     id: 'notif-002',
     userId: '00000000-0000-0000-0000-000000000001',
     type: 'deadline_reminder',
+    priority: 'immediate',
+    idempotencyKey: 'idemp:user1:deadline_reminder:app1:inapp:14d',
+    entityType: 'application',
+    entityId: 'app-001',
     title: '14 Days Remaining: OpenSSF Fellowship Deadline',
     message: 'Application deadline is November 23, 2026. Checklist is 50% complete.',
     link: '/applications',
@@ -25,6 +33,8 @@ export const mockNotifications: Notification[] = [
     id: 'notif-003',
     userId: '00000000-0000-0000-0000-000000000001',
     type: 'source_issue',
+    priority: 'immediate',
+    entityType: 'source',
     title: 'Source Outage Detected',
     message: "Source 'DefSec Security Bounties Feed' failed health check with HTTP 502 Bad Gateway (7 consecutive attempts).",
     link: '/sources',
@@ -36,11 +46,55 @@ export const mockNotifications: Notification[] = [
     id: 'notif-004',
     userId: '00000000-0000-0000-0000-000000000001',
     type: 'daily_digest',
+    priority: 'digest',
     title: 'Daily Opportunity Digest — Monday, Nov 9',
     message: '3 new opportunities indexed, 1 candidate source recommended for approval.',
     link: '/discover',
     read: true,
     readAt: '2026-11-09T09:12:00.000Z',
     createdAt: '2026-11-09T07:00:00.000Z',
+  },
+];
+
+export const mockNotificationPreferences: NotificationPreferences = {
+  highPriorityThreshold: 85,
+  digestTime: '08:00',
+  timezone: 'Africa/Lagos',
+  reminderOffsets: [14, 7, 3, 1],
+  categoryPreferences: {
+    fellowship: true,
+    internship: true,
+    hackathon_ctf: true,
+    dev_programme: true,
+    scholarship: true,
+    research: true,
+  },
+  emailEnabled: true,
+  quietHoursStart: '23:00',
+  quietHoursEnd: '06:00',
+};
+
+export const mockNotificationDeliveries: NotificationDelivery[] = [
+  {
+    id: 'del-001',
+    userId: '00000000-0000-0000-0000-000000000001',
+    channel: 'email',
+    idempotencyKey: 'idemp:user1:priority_alert:opp1:email:instant',
+    providerId: 're_123456789_mock',
+    status: 'sent',
+    attempts: 1,
+    sentAt: '2026-11-09T20:15:02.000Z',
+    createdAt: '2026-11-09T20:15:00.000Z',
+  },
+  {
+    id: 'del-002',
+    userId: '00000000-0000-0000-0000-000000000001',
+    channel: 'email',
+    idempotencyKey: 'idemp:user1:deadline_reminder:app1:email:14d',
+    providerId: 're_987654321_mock',
+    status: 'sent',
+    attempts: 1,
+    sentAt: '2026-11-09T08:00:04.000Z',
+    createdAt: '2026-11-09T08:00:00.000Z',
   },
 ];

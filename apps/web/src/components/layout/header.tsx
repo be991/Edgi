@@ -148,6 +148,23 @@ export function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderProps) {
                   ))
                 )}
               </div>
+
+              <div className="pt-2.5 mt-2 border-t border-border flex items-center justify-between">
+                <Link
+                  href="/notifications"
+                  onClick={() => setShowNotifications(false)}
+                  className="text-xs text-primary font-bold hover:underline"
+                >
+                  Open Notifications Hub &rarr;
+                </Link>
+                <Link
+                  href="/notifications?tab=preferences"
+                  onClick={() => setShowNotifications(false)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Settings
+                </Link>
+              </div>
             </div>
           )}
         </div>

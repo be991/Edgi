@@ -23,6 +23,8 @@ model User {
   applicationDocuments   ApplicationDocument[]
   notifications          Notification[]
   notificationPreferences NotificationPreference[]
+  notificationDeliveries NotificationDelivery[]
+  userDocuments          UserDocument[]
   opportunityMatches     OpportunityMatch[]
   eligibilityAssessments EligibilityAssessment[]
   userFeedbacks          UserFeedback[]
@@ -366,29 +368,46 @@ model SavedOpportunity {
 // 16. Applications (Application Lifecycle Tracker)
 // -----------------------------------------------------------------------------
 model Application {
-  id             String                @id @default(uuid()) @db.Uuid
-  opportunityId  String                @map("opportunity_id") @db.Uuid
-  userId         String                @map("user_id") @db.Uuid
-  status         String                @default("saved") // saved, preparing, submitted, interviewing, etc.
-  appliedAt      DateTime?             @map("applied_at")
+  id             String                     @id @default(uuid()) @db.Uuid
+  opportunityId  String                     @map("opportunity_id") @db.Uuid
+  userId         String                     @map("user_id") @db.Uuid
+  status         String                     @default("saved") // saved, interested, preparing, applied, assessment, interview, accepted, rejected, withdrawn, closed
+  appliedAt      DateTime?                  @map("applied_at")
   deadline       DateTime?
-  followUpDate   DateTime?             @map("follow_up_date")
-  notes          String?               @db.Text
-  checklist      Json                  @default("[]") // { id, task, completed }[]
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
+  followUpDate   DateTime?                  @map("follow_up_date")
+  notes          String?                    @db.Text
+  checklist      Json                       @default("[]") // { id, task, completed }[]
+  draftAnswers   Json?                      @default("{}") @map("draft_answers")
+  interviewInfo  Json?                      @default("{}") @map("interview_info")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
 
-  opportunity    Opportunity           @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity    Opportunity                @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents      ApplicationDocument[]
+  statusHistory  ApplicationStatusHistory[]
 
   @@unique([opportunityId, userId])
   @@index([userId, status])
   @@map("applications")
 }
 
+model ApplicationStatusHistory {
+  id            String      @id @default(uuid()) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  fromStatus    String      @map("from_status")
+  toStatus      String      @map("to_status")
+  note          String?     @db.Text
+  changedAt     DateTime    @default(now()) @map("changed_at")
+
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("application_status_history")
+}
+
 // -----------------------------------------------------------------------------
-// 17. Application Documents (CV, Transcripts, Cover letters)
+// 17. Application Documents (Attached to Applications)
 // -----------------------------------------------------------------------------
 model ApplicationDocument {
   id            String      @id @default(uuid()) @db.Uuid
@@ -396,7 +415,7 @@ model ApplicationDocument {
   userId        String      @map("user_id") @db.Uuid
   name          String
   fileUrl       String      @map("file_url")
-  type          String      // cv, cover_letter, transcript, portfolio
+  type          String      // cv, cover_letter, transcript, portfolio, essay, certificate, other
   createdAt     DateTime    @default(now()) @map("created_at")
 
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -408,37 +427,101 @@ model ApplicationDocument {
 }
 
 // -----------------------------------------------------------------------------
+// 17B. User Document Store (Private Document Repository with Versioning)
+// -----------------------------------------------------------------------------
+model UserDocument {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  fileName  String   @map("file_name")
+  fileUrl   String   @map("file_url")
+  fileSize  Int      @map("file_size")
+  mimeType  String   @map("mime_type")
+  type      String   // cv, transcript, certificate, essay, cover_letter, other
+  version   Int      @default(1)
+  checksum  String?
+  tags      String[] @default([])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_documents")
+}
+
+// -----------------------------------------------------------------------------
 // 18. Notifications
 // -----------------------------------------------------------------------------
 model Notification {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  type      String    // priority_alert, daily_digest, deadline_reminder, source_issue, system
-  title     String
-  message   String    @db.Text
-  link      String?
-  read      Boolean   @default(false)
-  readAt    DateTime? @map("read_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id             String                 @id @default(uuid()) @db.Uuid
+  userId         String                 @map("user_id") @db.Uuid
+  type           String                 // priority_alert, daily_digest, deadline_reminder, status_changed, source_issue, budget_threshold, system
+  priority       String                 @default("immediate") // immediate, digest, low
+  idempotencyKey String?                @map("idempotency_key")
+  entityType     String?                @map("entity_type") // opportunity, application, source, system
+  entityId       String?                @map("entity_id")
+  title          String
+  message        String                 @db.Text
+  link           String?
+  read           Boolean                @default(false)
+  readAt         DateTime?              @map("read_at")
+  createdAt      DateTime               @default(now()) @map("created_at")
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries     NotificationDelivery[]
 
   @@index([userId, read])
   @@index([createdAt])
+  @@index([idempotencyKey])
   @@map("notifications")
+}
+
+// -----------------------------------------------------------------------------
+// 18B. Notification Deliveries (Idempotent delivery ledger & retry tracking)
+// -----------------------------------------------------------------------------
+model NotificationDelivery {
+  id             String        @id @default(uuid()) @db.Uuid
+  notificationId String?       @map("notification_id") @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  channel        String        // email, in_app
+  idempotencyKey String        @map("idempotency_key")
+  providerId     String?       @map("provider_id")
+  status         String        @default("queued") // queued, sent, failed, delivered
+  attempts       Int           @default(1)
+  lastError      String?       @db.Text @map("last_error")
+  sentAt         DateTime?     @map("sent_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  notification   Notification? @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId])
+  @@index([status])
+  @@map("notification_deliveries")
 }
 
 // -----------------------------------------------------------------------------
 // 19. Notification Preferences
 // -----------------------------------------------------------------------------
 model NotificationPreference {
-  id        String  @id @default(uuid()) @db.Uuid
-  userId    String  @map("user_id") @db.Uuid
-  channel   String  // in_app, email
-  eventType String  @map("event_type") // new_high_relevance, deadline_warning, source_failure
-  enabled   Boolean @default(true)
+  id                     String  @id @default(uuid()) @db.Uuid
+  userId                 String  @map("user_id") @db.Uuid
+  channel                String  // in_app, email
+  eventType              String  @map("event_type") // new_high_relevance, deadline_warning, source_failure
+  enabled                Boolean @default(true)
+  highPriorityThreshold  Int     @default(85) @map("high_priority_threshold")
+  digestTime             String  @default("08:00") @map("digest_time")
+  timezone               String  @default("Africa/Lagos")
+  reminderOffsets        Int[]   @default([14, 7, 3, 1]) @map("reminder_offsets")
+  categoryPreferences    Json    @default("{\"fellowship\": true, \"internship\": true, \"hackathon_ctf\": true, \"dev_programme\": true}") @map("category_preferences")
+  emailEnabled           Boolean @default(true) @map("email_enabled")
+  quietHoursStart        String? @map("quiet_hours_start")
+  quietHoursEnd          String? @map("quiet_hours_end")
 
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, channel, eventType])
   @@map("notification_preferences")

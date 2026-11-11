@@ -5,6 +5,12 @@ import { processSourceCheckJob, SourceCheckJobData } from './source-processor';
 import { processDiscoveryJob, DiscoveryJobData } from './discovery-processor';
 import { processContentJob, ContentProcessingJobData, runReverificationSweep } from './content-processor';
 import { processMatchJob, MatchJobData } from './match-processor';
+import {
+  processNotificationJob,
+  NotificationJobData,
+  runDeadlineReminderSweep,
+  runDailyDigestSweep,
+} from './notification-processor';
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
@@ -174,7 +180,32 @@ async function bootstrap() {
     console.error(`❌ Match assessment job #${job?.id} failed:`, err.message);
   });
 
-  // 6. Scheduler: checks for due sources every 60 seconds
+  // 6. Notification Dispatch & Reminder Queue (Phase 7)
+  const notificationQueueName = 'notification-queue';
+  const notificationQueue = new Queue<NotificationJobData>(notificationQueueName, {
+    connection: redisConnection,
+  });
+
+  const notificationWorker = new Worker<NotificationJobData>(
+    notificationQueueName,
+    async (job: Job<NotificationJobData>) => {
+      return processNotificationJob(job);
+    },
+    {
+      connection: redisConnection,
+      concurrency: 2,
+    }
+  );
+
+  notificationWorker.on('completed', (job) => {
+    console.log(`✨ Notification job #${job.id} (${job.data.jobType}) completed.`);
+  });
+
+  notificationWorker.on('failed', (job, err) => {
+    console.error(`❌ Notification job #${job?.id} failed:`, err.message);
+  });
+
+  // 7. Scheduler: checks for due sources every 60 seconds
   const scheduleSourceChecks = async () => {
     try {
       const now = new Date();
@@ -209,25 +240,36 @@ async function bootstrap() {
   // Run an initial sweep after 5 seconds
   setTimeout(scheduleSourceChecks, 5000);
 
-  // 6. Re-verification Loop: checks active opportunities for expirations every 1 hour
+  // 8. Re-verification Loop: checks active opportunities for expirations every 1 hour
   const reverificationInterval = setInterval(runReverificationSweep, 3600000);
   setTimeout(runReverificationSweep, 10000);
+
+  // 9. Verified Deadline Reminder Sweeper (Every 4 hours)
+  const reminderInterval = setInterval(runDeadlineReminderSweep, 4 * 3600000);
+  setTimeout(runDeadlineReminderSweep, 15000);
+
+  // 10. Daily Digest Sweeper (Every 1 hour, triggers if time matches digest schedule)
+  const digestInterval = setInterval(runDailyDigestSweep, 3600000);
 
   // Graceful shutdown
   const shutdown = async () => {
     console.log('🛑 Shutting down workers gracefully...');
     clearInterval(schedulerInterval);
     clearInterval(reverificationInterval);
+    clearInterval(reminderInterval);
+    clearInterval(digestInterval);
     await heartbeatWorker.close();
     await sourceWorker.close();
     await discoveryWorker.close();
     await processingWorker.close();
     await matchWorker.close();
+    await notificationWorker.close();
     await heartbeatQueue.close();
     await sourceQueue.close();
     await discoveryQueue.close();
     await processingQueue.close();
     await matchQueue.close();
+    await notificationQueue.close();
     redisConnection.disconnect();
     await prisma.$disconnect();
     process.exit(0);

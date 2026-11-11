@@ -19,6 +19,8 @@ import {
   GitMerge,
   Share2,
   UploadCloud,
+  Bell,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,7 +31,9 @@ const navItems = [
   { href: '/capture', label: 'Quick Capture', icon: UploadCloud },
   { href: '/connectors', label: 'Social Connectors', icon: Share2 },
   { href: '/saved', label: 'Saved', icon: Bookmark },
-  { href: '/applications', label: 'Application Tracker', icon: Briefcase },
+  { href: '/applications', label: 'Application Pipeline', icon: Briefcase },
+  { href: '/documents', label: 'Documents Vault', icon: FileText },
+  { href: '/notifications', label: 'Notifications Hub', icon: Bell },
   { href: '/sources', label: 'Sources & Health', icon: Radio },
   { href: '/sources/candidates', label: 'Candidate Approvals', icon: FileCheck2 },
   { href: '/processing', label: 'Processing Queue', icon: GitMerge },

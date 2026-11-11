@@ -4,7 +4,13 @@ import {
   Source,
   CandidateSource,
   Application,
+  ApplicationStatus,
+  UserDocument,
   Notification,
+  NotificationPreferences,
+  NotificationDelivery,
+  EmailTemplatePreview,
+  AiDraftResponse,
   UserProfile,
   UserPreferences,
   UsageBudget,
@@ -16,9 +22,13 @@ import {
 
 import { mockOpportunities } from '../fixtures/opportunities';
 import { mockSources, mockCandidateSources } from '../fixtures/sources';
-import { mockApplications } from '../fixtures/applications';
+import { mockApplications, mockUserDocuments } from '../fixtures/applications';
 import { mockUserProfile, mockUserPreferences } from '../fixtures/profile';
-import { mockNotifications } from '../fixtures/notifications';
+import {
+  mockNotifications,
+  mockNotificationPreferences,
+  mockNotificationDeliveries,
+} from '../fixtures/notifications';
 import { mockUsageBudget, mockSystemHealth } from '../fixtures/usage';
 import { mockProcessingReviewItems, ProcessingReviewItemMock } from '../fixtures/processing';
 import { mockSocialConnectors } from '../fixtures/connectors';
@@ -32,9 +42,12 @@ let inMemoryReviewItems = [...mockProcessingReviewItems];
 let inMemorySources = [...mockSources];
 let inMemoryCandidateSources = [...mockCandidateSources];
 let inMemoryApplications = [...mockApplications];
+let inMemoryDocuments = [...mockUserDocuments];
 let inMemoryProfile = { ...mockUserProfile };
 let inMemoryPreferences = { ...mockUserPreferences };
 let inMemoryNotifications = [...mockNotifications];
+let inMemoryNotificationPreferences = { ...mockNotificationPreferences };
+let inMemoryDeliveries = [...mockNotificationDeliveries];
 let inMemoryBudget = { ...mockUsageBudget };
 let inMemoryConnectors = [...mockSocialConnectors];
 
@@ -618,6 +631,7 @@ export const api = {
         opportunityTitle: opp.title,
         organizationName: opp.organization.name,
         opportunityCategory: opp.category,
+        opportunityStatus: 'open',
         userId: inMemoryProfile.userId,
         status: 'preparing',
         appliedAt: null,
@@ -629,6 +643,18 @@ export const api = {
           { id: `chk-${Date.now()}-2`, task: 'Submit application packet', completed: false },
         ],
         documents: [],
+        statusHistory: [
+          {
+            id: `hist-${Date.now()}`,
+            applicationId: `app-${Date.now()}`,
+            fromStatus: 'saved',
+            toStatus: 'preparing',
+            note: 'Application record started from discovery.',
+            changedAt: new Date().toISOString(),
+          },
+        ],
+        draftAnswers: {},
+        interviewInfo: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -642,6 +668,223 @@ export const api = {
       body: JSON.stringify({ opportunityId }),
     });
     return res.json();
+  },
+
+  async transitionApplicationStatus(id: string, status: ApplicationStatus, note?: string): Promise<Application> {
+    if (API_MODE === 'mock') {
+      const idx = inMemoryApplications.findIndex((a) => a.id === id);
+      if (idx !== -1) {
+        const prev = inMemoryApplications[idx]!;
+        const fromStatus = prev.status;
+        const newHistoryItem = {
+          id: `hist-${Date.now()}`,
+          applicationId: id,
+          fromStatus,
+          toStatus: status,
+          note: note || `Status transitioned from ${fromStatus} to ${status}.`,
+          changedAt: new Date().toISOString(),
+        };
+
+        inMemoryApplications[idx] = {
+          ...prev,
+          status,
+          appliedAt: status === 'applied' && !prev.appliedAt ? new Date().toISOString() : prev.appliedAt,
+          statusHistory: [newHistoryItem, ...(prev.statusHistory || [])],
+          updatedAt: new Date().toISOString(),
+        };
+        return inMemoryApplications[idx]!;
+      }
+      throw new Error('Application not found');
+    }
+    const res = await fetch(`${API_URL}/applications/${id}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, note }),
+    });
+    if (!res.ok) throw new Error('Failed to transition application status');
+    return res.json();
+  },
+
+  async runAiAssist(
+    applicationId: string,
+    promptType: 'tailor_cv_bullets' | 'draft_motivation' | 'explain_requirements' | 'missing_documents',
+    targetRole?: string,
+  ): Promise<AiDraftResponse> {
+    if (API_MODE === 'mock') {
+      const app = inMemoryApplications.find((a) => a.id === applicationId);
+      if (!app) throw new Error('Application not found');
+
+      if (promptType === 'tailor_cv_bullets') {
+        return {
+          draftType: 'tailor_cv_bullets',
+          content: [
+            '• Developed automated vulnerability discovery tools in Python and TypeScript, auditing web targets against the OWASP Top 10 framework as part of 200-level Cyber Security coursework and hands-on laboratory exercises.',
+            '• Configured and hardened Linux server environments with strict firewall rules and permission access controls, maintaining high-integrity service availability.',
+            '• Collaborated on open-source software security research, reviewing dependency trees and CI/CD pipelines to identify potential supply chain vulnerabilities.',
+            '• Actively represented university cohort in competitive Capture the Flag (CTF) security challenges, demonstrating rapid incident triage and binary/web exploitation remediation.',
+          ].join('\n'),
+          usedProfileFacts: [
+            'Degree: B.Sc. Cyber Security Undergraduate (200-Level)',
+            'Technical Skills: Python, TypeScript, Linux system administration, AppSec Auditing, Web Security (OWASP Top 10), Git',
+          ],
+          missingQualifications: [],
+          disclaimer: '[AI DRAFT — Requires Your Review & Approval. Verify all statements before submitting. No auto-submit capability exists.]',
+          generatedAt: new Date().toISOString(),
+        };
+      }
+
+      if (promptType === 'draft_motivation') {
+        return {
+          draftType: 'draft_motivation',
+          content: [
+            `Dear Selection Committee at ${app.organizationName},`,
+            '',
+            `I am writing to express my enthusiastic application for the ${app.opportunityTitle}. As a 200-level Cyber Security undergraduate at Federal University of Technology, Owerri in Nigeria, I have concentrated my academic and practical efforts on application security, vulnerability assessment, and open-source system resiliency.`,
+            '',
+            `Through dedicated project work in Python and TypeScript, I have focused on automating security evaluations against OWASP Top 10 vulnerabilities and understanding the critical challenges facing modern software supply chains. The mission of ${app.organizationName} directly resonates with my objective to develop secure, high-integrity technologies that serve global communities.`,
+            '',
+            'Participating in this programme will enable me to contribute my energetic problem-solving mindset and technical discipline while learning from seasoned mentors in cybersecurity.',
+            '',
+            'Sincerely,',
+            'Bethel Okafor Egwuchukwu',
+          ].join('\n'),
+          usedProfileFacts: [
+            'Degree: B.Sc. Cyber Security Undergraduate (200-Level)',
+            'Institution: Federal University of Technology, Owerri (FUTO), Nigeria',
+            'Technical Skills: Python, TypeScript, Linux system administration, AppSec Auditing',
+            'Interests: Open source security (OpenSSF), CTF competitions, vulnerability research',
+          ],
+          missingQualifications: [],
+          disclaimer: '[AI DRAFT — Requires Your Review & Approval. Verify all statements before submitting. No auto-submit capability exists.]',
+          generatedAt: new Date().toISOString(),
+        };
+      }
+
+      if (promptType === 'explain_requirements') {
+        return {
+          draftType: 'explain_requirements',
+          content: [
+            `Requirements Breakdown for ${app.opportunityTitle}:`,
+            '1. Education Level: Requires undergraduate enrollment in a relevant STEM/Computing discipline. (Your 200L Cyber Security status meets this requirement).',
+            '2. Geographic Eligibility: Confirmed open to Nigerian residents with complete remote access and funded support.',
+            '3. Language & Commitment: Requires fluent English proficiency and 15-20 hours/week commitment during academic term.',
+            '4. Deliverables: Involves contributing to real-world security audits and submitting progress milestones.',
+          ].join('\n'),
+          usedProfileFacts: [
+            'Location / Nationality: Nigerian citizen resident in Nigeria',
+            'Degree: B.Sc. Cyber Security Undergraduate (200-Level)',
+          ],
+          missingQualifications: [],
+          disclaimer: '[AI DRAFT — Requires Your Review & Approval. Verify all statements before submitting. No auto-submit capability exists.]',
+          generatedAt: new Date().toISOString(),
+        };
+      }
+
+      // missing_documents
+      const uploadedTypes = new Set(app.documents.map((d) => d.type));
+      const missing: string[] = [];
+      if (!uploadedTypes.has('cv')) missing.push('Updated Technical CV / Resume');
+      if (!uploadedTypes.has('transcript')) missing.push('Official 200L Academic Transcript');
+      if (!uploadedTypes.has('cover_letter') && !uploadedTypes.has('essay')) {
+        missing.push('Statement of Intent / Motivation Letter');
+      }
+
+      return {
+        draftType: 'missing_documents',
+        content: missing.length > 0
+          ? `Missing packet documents detected:\n${missing.map((m) => `• [MISSING] ${m}`).join('\n')}\n\nPlease upload these documents to your Document Vault and attach them to this application checklist.`
+          : 'All standard document packet requirements are satisfied in your application packet!',
+        usedProfileFacts: ['Degree: B.Sc. Cyber Security Undergraduate (200-Level)'],
+        missingQualifications: missing,
+        disclaimer: '[AI DRAFT — Requires Your Review & Approval. Verify all statements before submitting. No auto-submit capability exists.]',
+        generatedAt: new Date().toISOString(),
+      };
+    }
+
+    const res = await fetch(`${API_URL}/applications/${applicationId}/ai-assist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ promptType, targetRole }),
+    });
+    if (!res.ok) throw new Error('Failed to run AI Assistant');
+    return res.json();
+  },
+
+  async getUserDocuments(): Promise<UserDocument[]> {
+    if (API_MODE === 'mock') {
+      return [...inMemoryDocuments];
+    }
+    const res = await fetch(`${API_URL}/documents`);
+    if (!res.ok) throw new Error('Failed to fetch documents');
+    return res.json();
+  },
+
+  async uploadUserDocument(doc: {
+    name: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    type: string;
+    tags?: string[];
+  }): Promise<UserDocument> {
+    if (API_MODE === 'mock') {
+      const existing = inMemoryDocuments.find((d) => d.fileName === doc.fileName);
+      const version = existing ? existing.version + 1 : 1;
+      const newDoc: UserDocument = {
+        id: `doc-user-${Date.now()}`,
+        userId: inMemoryProfile.userId,
+        name: doc.name,
+        fileName: doc.fileName,
+        fileUrl: `/storage/private/documents/user/${Date.now()}-${doc.fileName}`,
+        fileSize: doc.fileSize,
+        mimeType: doc.mimeType,
+        type: doc.type as any,
+        version,
+        checksum: `sha256-${Math.random().toString(36).substring(2, 10)}`,
+        tags: doc.tags || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      inMemoryDocuments.unshift(newDoc);
+      return newDoc;
+    }
+    const res = await fetch(`${API_URL}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(doc),
+    });
+    if (!res.ok) throw new Error('Failed to upload document');
+    return res.json();
+  },
+
+  async deleteUserDocument(id: string): Promise<void> {
+    if (API_MODE === 'mock') {
+      inMemoryDocuments = inMemoryDocuments.filter((d) => d.id !== id);
+      return;
+    }
+    await fetch(`${API_URL}/documents/${id}`, { method: 'DELETE' });
+  },
+
+  async attachDocumentToApplication(applicationId: string, documentId: string): Promise<void> {
+    if (API_MODE === 'mock') {
+      const app = inMemoryApplications.find((a) => a.id === applicationId);
+      const doc = inMemoryDocuments.find((d) => d.id === documentId);
+      if (app && doc) {
+        app.documents.push({
+          id: `doc-${Date.now()}`,
+          name: doc.name,
+          fileUrl: doc.fileUrl,
+          type: doc.type as any,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+      return;
+    }
+    await fetch(`${API_URL}/applications/${applicationId}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId }),
+    });
   },
 
   // 3. Sources & Health
@@ -845,6 +1088,154 @@ export const api = {
       return;
     }
     await fetch(`${API_URL}/notifications/${id}/read`, { method: 'POST' });
+  },
+
+  async markAllNotificationsAsRead(): Promise<void> {
+    if (API_MODE === 'mock') {
+      inMemoryNotifications = inMemoryNotifications.map((n) => ({
+        ...n,
+        read: true,
+        readAt: new Date().toISOString(),
+      }));
+      return;
+    }
+    await fetch(`${API_URL}/notifications/read-all`, { method: 'POST' });
+  },
+
+  async getNotificationPreferences(): Promise<NotificationPreferences> {
+    if (API_MODE === 'mock') {
+      return { ...inMemoryNotificationPreferences };
+    }
+    const res = await fetch(`${API_URL}/notifications/preferences`);
+    if (!res.ok) throw new Error('Failed to fetch notification preferences');
+    return res.json();
+  },
+
+  async updateNotificationPreferences(updates: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+    if (API_MODE === 'mock') {
+      inMemoryNotificationPreferences = {
+        ...inMemoryNotificationPreferences,
+        ...updates,
+      };
+      return { ...inMemoryNotificationPreferences };
+    }
+    const res = await fetch(`${API_URL}/notifications/preferences`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update notification preferences');
+    return res.json();
+  },
+
+  async getNotificationDeliveries(): Promise<NotificationDelivery[]> {
+    if (API_MODE === 'mock') {
+      return [...inMemoryDeliveries];
+    }
+    const res = await fetch(`${API_URL}/notifications/deliveries`);
+    if (!res.ok) throw new Error('Failed to fetch deliveries');
+    return res.json();
+  },
+
+  async previewEmailTemplate(template: 'priority_alert' | 'daily_digest' | 'deadline_reminder'): Promise<EmailTemplatePreview> {
+    if (API_MODE === 'mock') {
+      if (template === 'priority_alert') {
+        return {
+          template: 'priority_alert',
+          subject: '🔥 [96% Match] OpenSSF Global Cybersecurity Fellowship 2027 — OpenSSF',
+          html: `<div style="font-family: -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 12px; border: 1px solid #334155; max-width: 600px; margin: 0 auto;">
+            <div style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase;">Edgi Priority Alert</div>
+            <h2 style="margin: 8px 0; color: #ffffff; font-size: 20px;">OpenSSF Global Cybersecurity Fellowship 2027</h2>
+            <p style="color: #94a3b8; font-size: 13px;">Open Source Security Foundation &bull; Fellowship &bull; <strong style="color: #34d399;">96% Match</strong></p>
+            <div style="background: #1e293b; padding: 12px; border-radius: 8px; margin: 16px 0; font-size: 13px;">
+              <div>Verified Deadline: <strong>November 23, 2026</strong></div>
+              <div style="color: #38bdf8; margin-top: 4px;">🇳🇬 Verified Open to Nigeria (Fully Funded + Remote)</div>
+            </div>
+            <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">Direct alignment with your Cyber Security undergraduate track and AppSec auditing coursework.</p>
+          </div>`,
+          recipient: inMemoryProfile.email,
+          generatedAt: new Date().toISOString(),
+        };
+      }
+      if (template === 'daily_digest') {
+        return {
+          template: 'daily_digest',
+          subject: '📬 Daily Opportunity Digest — Monday, Nov 11 (2 new matches)',
+          html: `<div style="font-family: -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 12px; border: 1px solid #334155; max-width: 600px; margin: 0 auto;">
+            <div style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase;">Edgi Daily Digest</div>
+            <h2 style="margin: 8px 0; color: #ffffff; font-size: 20px;">Daily Opportunity Digest</h2>
+            <p style="color: #94a3b8; font-size: 13px;">Africa/Lagos (GMT+1) &bull; 08:00 Scheduled Delivery</p>
+            <div style="background: #1e293b; padding: 12px; border-radius: 8px; margin: 16px 0; font-size: 13px;">
+              <div style="color: #f87171; font-weight: bold;">⚠️ 1 Deadline Closing This Week:</div>
+              <div style="margin-top: 4px;">African Cyber Defense Fellowship (3 days left)</div>
+            </div>
+            <p style="font-size: 13px; color: #cbd5e1;">2 new high-relevance opportunities indexed in cybersecurity and open source.</p>
+          </div>`,
+          recipient: inMemoryProfile.email,
+          generatedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        template: 'deadline_reminder',
+        subject: '⏰ [7 Days Left] Deadline Reminder: OpenSSF Global Cybersecurity Fellowship 2027',
+        html: `<div style="font-family: -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 12px; border: 1px solid #334155; max-width: 600px; margin: 0 auto;">
+          <div style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: bold; background: rgba(239, 68, 68, 0.2); color: #f87171;">⏰ 7 Days Remaining</div>
+          <h2 style="margin: 12px 0 6px 0; color: #ffffff; font-size: 20px;">OpenSSF Global Cybersecurity Fellowship 2027</h2>
+          <p style="color: #94a3b8; font-size: 13px;">OpenSSF &bull; Verified Deadline: November 23, 2026</p>
+          <div style="background: #1e293b; padding: 12px; border-radius: 8px; margin: 16px 0; font-size: 13px;">
+            <div>Packet Progress: <strong>3 of 4 checklist items complete</strong></div>
+          </div>
+          <p style="font-size: 13px; color: #cbd5e1;">Open your application packet to finalize statement and review AI-tailored bullets.</p>
+        </div>`,
+        recipient: inMemoryProfile.email,
+        generatedAt: new Date().toISOString(),
+      };
+    }
+    const res = await fetch(`${API_URL}/notifications/preview/${template}`);
+    if (!res.ok) throw new Error('Failed to render template preview');
+    return res.json();
+  },
+
+  async triggerTestAlert(opportunityId: string): Promise<any> {
+    if (API_MODE === 'mock') {
+      const newDelivery: NotificationDelivery = {
+        id: `del-test-${Date.now()}`,
+        userId: inMemoryProfile.userId,
+        channel: 'email',
+        idempotencyKey: `idemp:user:alert:${opportunityId}:instant`,
+        providerId: `re_mock_test_${Date.now()}`,
+        status: 'sent',
+        attempts: 1,
+        sentAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
+      inMemoryDeliveries.unshift(newDelivery);
+      return { success: true, emailDispatched: true, emailResult: newDelivery };
+    }
+    const res = await fetch(`${API_URL}/notifications/test-alert/${opportunityId}`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to trigger test alert');
+    return res.json();
+  },
+
+  async triggerTestDigest(): Promise<any> {
+    if (API_MODE === 'mock') {
+      const newDelivery: NotificationDelivery = {
+        id: `del-test-${Date.now()}`,
+        userId: inMemoryProfile.userId,
+        channel: 'email',
+        idempotencyKey: `idemp:user:digest:${Date.now()}:email`,
+        providerId: `re_mock_test_${Date.now()}`,
+        status: 'sent',
+        attempts: 1,
+        sentAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
+      inMemoryDeliveries.unshift(newDelivery);
+      return { sent: true, emailResult: newDelivery };
+    }
+    const res = await fetch(`${API_URL}/notifications/test-digest`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to trigger test digest');
+    return res.json();
   },
 
   // 5. Profile & Preferences (Live DB capable)

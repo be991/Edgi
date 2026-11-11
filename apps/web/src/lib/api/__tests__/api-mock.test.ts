@@ -108,7 +108,56 @@ export async function runMockApiVerification() {
   }
   console.log('✅ Connector Revocation: Successfully revoked X token and set status to authorization_required.');
 
-  console.log('\n🎉 All Mock Data Layer, Nasty Fixtures & Phase 6 Social Tests PASSED!');
+  // 6. Verify Phase 7 Notifications & Application Pipeline
+  console.log('\n--- 6. Phase 7 Notifications & Application Pipeline Tests ---');
+  // 6A. Transition application status and verify audit history
+  const transitioned = await api.transitionApplicationStatus(newApp.id, 'applied', 'Submitted packet via official portal');
+  if (transitioned.status !== 'applied' || !transitioned.appliedAt || transitioned.statusHistory.length === 0) {
+    throw new Error('Application status transition failed to record applied date or history.');
+  }
+  console.log(`✅ Application Lifecycle: Transitioned "${transitioned.opportunityTitle}" to "applied" with ${transitioned.statusHistory.length} status history entries.`);
+
+  // 6B. Test Grounded AI Assistant (zero fabrication)
+  const aiBullets = await api.runAiAssist(newApp.id, 'tailor_cv_bullets');
+  if (!aiBullets.content.includes('OWASP Top 10') || aiBullets.usedProfileFacts.length === 0) {
+    throw new Error('AI Assistant failed to tailor CV bullets from real profile facts.');
+  }
+  console.log(`✅ Grounded AI Assistant: Tailored CV bullets citing ${aiBullets.usedProfileFacts.length} profile facts.`);
+
+  // 6C. Test Documents Vault
+  const initialDocs = await api.getUserDocuments();
+  const uploadedDoc = await api.uploadUserDocument({
+    name: 'FUTO Verification Letter 2026',
+    fileName: 'FUTO_Enrollment_Letter.pdf',
+    fileSize: 85000,
+    mimeType: 'application/pdf',
+    type: 'certificate',
+    tags: ['academic', 'futo'],
+  });
+  if (uploadedDoc.fileName !== 'FUTO_Enrollment_Letter.pdf' || uploadedDoc.version !== 1) {
+    throw new Error('Document vault upload failed.');
+  }
+  console.log(`✅ Documents Vault: Uploaded versioned document "${uploadedDoc.name}" (v${uploadedDoc.version}).`);
+
+  // 6D. Test Notification Preferences & Email Previews
+  const initialPrefs = await api.getNotificationPreferences();
+  if (initialPrefs.highPriorityThreshold !== 85) {
+    throw new Error('Default notification preferences threshold mismatch.');
+  }
+  const preview = await api.previewEmailTemplate('priority_alert');
+  if (!preview.html.includes('Edgi Priority Alert') && !preview.html.includes('OpenSSF')) {
+    throw new Error('Email template preview failed.');
+  }
+  console.log(`✅ Email Templates Preview: Rendered responsive HTML for "${preview.template}".`);
+
+  // 6E. Test Alert Dispatch
+  const testAlert = await api.triggerTestAlert(newApp.opportunityId);
+  if (!testAlert.emailDispatched || !testAlert.emailResult) {
+    throw new Error('Test priority alert dispatch failed.');
+  }
+  console.log(`✅ Immediate Priority Alert: Dispatched email with provider ID ${testAlert.emailResult.providerId}.`);
+
+  console.log('\n🎉 All Mock Data Layer, Nasty Fixtures & Phase 7 Notifications/Applications Tests PASSED!');
 }
 
 if (require.main === module) {

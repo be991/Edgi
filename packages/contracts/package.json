@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/__tests__/contracts.test.ts"
+    "test": "tsx src/__tests__/contracts.test.ts && tsx src/__tests__/phase-7.test.ts"
   },
   "dependencies": {
     "zod": "^3.24.2"

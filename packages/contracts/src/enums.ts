@@ -61,13 +61,19 @@ export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
 export const ApplicationStatusSchema = z.enum([
   'saved',
+  'interested',
   'preparing',
+  'applied',
   'submitted',
+  'assessment',
+  'interview',
   'interviewing',
+  'accepted',
   'offered',
   'rejected',
-  'archived',
   'withdrawn',
+  'closed',
+  'archived',
 ]);
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
 
@@ -75,7 +81,9 @@ export const NotificationTypeSchema = z.enum([
   'priority_alert',
   'daily_digest',
   'deadline_reminder',
+  'status_changed',
   'source_issue',
+  'budget_threshold',
   'system',
 ]);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
