@@ -736,7 +736,7 @@ export const mockOpportunities: Opportunity[] = [
     relevanceScore: 88,
     eligibilityStatus: 'likely_eligible',
     priority: 86,
-    isOpenToNigeria: true,
+    isOpenToNigeria: false,
     relevanceBreakdown: {
       categoryScore: 85,
       skillsScore: 90,

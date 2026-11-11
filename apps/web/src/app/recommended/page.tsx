@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   Bookmark,
+  MapPin,
 } from 'lucide-react';
 import { api, getRecommended, submitFeedback } from '@/lib/api/client';
 import { Opportunity } from '@edgi/contracts';
@@ -28,7 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 export default function RecommendedPage() {
-  const [tab, setTab] = useState<'top' | 'verify_first' | 'ineligible'>('top');
+  const [tab, setTab] = useState<'top' | 'all' | 'verify_first' | 'ineligible'>('top');
   const [openToNigeriaOnly, setOpenToNigeriaOnly] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -58,8 +59,13 @@ export default function RecommendedPage() {
       } else {
         // Defensive fallback for stale dev bundles
         const oppsRes = await api.getOpportunities();
-        const opps = oppsRes.opportunities || [];
-        setOpportunities(opps);
+        let opps = oppsRes.opportunities || [];
+        if (openToNigeriaOnly) {
+          opps = opps.filter((o) => o.isOpenToNigeria);
+        }
+        if (selectedCategory !== 'all') {
+          opps = opps.filter((o) => o.category === selectedCategory);
+        }
         setTabCounts({
           all: opps.length,
           top: opps.filter((o) =>
@@ -68,6 +74,17 @@ export default function RecommendedPage() {
           verify_first: opps.filter((o) => o.eligibilityStatus === 'unknown').length,
           ineligible: opps.filter((o) => o.eligibilityStatus === 'ineligible').length,
         });
+
+        if (tab === 'top') {
+          opps = opps.filter((o) =>
+            ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus || '')
+          );
+        } else if (tab === 'verify_first') {
+          opps = opps.filter((o) => o.eligibilityStatus === 'unknown');
+        } else if (tab === 'ineligible') {
+          opps = opps.filter((o) => o.eligibilityStatus === 'ineligible');
+        }
+        setOpportunities(opps);
       }
     } catch (err) {
       console.error('Failed to load recommended opportunities:', err);
@@ -169,6 +186,24 @@ export default function RecommendedPage() {
               }`}
             >
               {tabCounts.top}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setTab('all')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+              tab === 'all'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <span>All Ranked</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                tab === 'all' ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted-foreground/15'
+              }`}
+            >
+              {tabCounts.all}
             </span>
           </button>
 
@@ -293,9 +328,13 @@ export default function RecommendedPage() {
                       <Badge variant="outline" className="text-[10px] capitalize">
                         {opp.category.replace('_', ' ')}
                       </Badge>
-                      {opp.isOpenToNigeria && (
+                      {opp.isOpenToNigeria ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                           🇳🇬 Open to Nigeria
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          🌍 Host: {opp.locations?.[0]?.country || 'Foreign Host'} (Visa/Onsite Restricted)
                         </span>
                       )}
                     </div>
@@ -460,10 +499,20 @@ export default function RecommendedPage() {
 
                 {/* Footer Controls & Feedback */}
                 <div className="pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-3 text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-muted-foreground">
                     <span>
                       Org:{' '}
                       <strong className="text-foreground">{opp.organization?.name || 'Independent Publisher'}</strong>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-muted-foreground" />
+                      <span>Host:</span>
+                      <strong className="text-foreground">
+                        {opp.locations?.some((l) => l.isRemote)
+                          ? 'Worldwide Remote'
+                          : opp.locations?.map((l) => l.country).filter(Boolean).join(', ') || 'Global'}
+                      </strong>
                     </span>
                     <span>•</span>
                     <span>

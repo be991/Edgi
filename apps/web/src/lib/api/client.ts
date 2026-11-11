@@ -67,33 +67,36 @@ export async function getRecommended(params?: {
   tabCounts: { all: number; top: number; verify_first: number; ineligible: number };
 }> {
   if (API_MODE === 'mock') {
-    let filtered = [...inMemoryOpportunities];
+    // Apply scope filters (Nigeria and category) first so tabCounts accurately reflect the active filter state
+    let scopeFiltered = [...inMemoryOpportunities];
+    if (params?.openToNigeria) {
+      scopeFiltered = scopeFiltered.filter((o) => o.isOpenToNigeria);
+    }
+    if (params?.category && params.category !== 'all') {
+      scopeFiltered = scopeFiltered.filter((o) => o.category === params.category);
+    }
 
     const tabCounts = {
-      all: inMemoryOpportunities.length,
-      top: inMemoryOpportunities.filter((o) =>
+      all: scopeFiltered.length,
+      top: scopeFiltered.filter((o) =>
         ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus || '')
       ).length,
-      verify_first: inMemoryOpportunities.filter((o) => o.eligibilityStatus === 'unknown').length,
-      ineligible: inMemoryOpportunities.filter((o) => o.eligibilityStatus === 'ineligible').length,
+      verify_first: scopeFiltered.filter((o) => o.eligibilityStatus === 'unknown').length,
+      ineligible: scopeFiltered.filter((o) => o.eligibilityStatus === 'ineligible').length,
     };
 
+    let filtered = scopeFiltered;
     if (params?.tab === 'top') {
-      filtered = filtered.filter((o) =>
+      filtered = scopeFiltered.filter((o) =>
         ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus || '')
       );
     } else if (params?.tab === 'verify_first') {
-      filtered = filtered.filter((o) => o.eligibilityStatus === 'unknown');
+      filtered = scopeFiltered.filter((o) => o.eligibilityStatus === 'unknown');
     } else if (params?.tab === 'ineligible') {
-      filtered = filtered.filter((o) => o.eligibilityStatus === 'ineligible');
-    }
-
-    if (params?.openToNigeria) {
-      filtered = filtered.filter((o) => o.isOpenToNigeria);
-    }
-
-    if (params?.category) {
-      filtered = filtered.filter((o) => o.category === params.category);
+      filtered = scopeFiltered.filter((o) => o.eligibilityStatus === 'ineligible');
+    } else {
+      // 'all' or default
+      filtered = scopeFiltered;
     }
 
     filtered.sort((a, b) => (b.priority ?? b.relevanceScore ?? 0) - (a.priority ?? a.relevanceScore ?? 0));

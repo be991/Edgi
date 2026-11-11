@@ -208,25 +208,35 @@ export class OpportunitiesService {
       })
     );
 
-    // Apply Filters
-    let filtered = evaluated;
+    // Apply Scope Filters (Nigeria and Category) first
+    let scopeFiltered = evaluated;
 
+    if (query.openToNigeria === 'true') {
+      scopeFiltered = scopeFiltered.filter((o) => o.isOpenToNigeria);
+    }
+
+    if (query.category && query.category !== 'all') {
+      scopeFiltered = scopeFiltered.filter((o) => o.category === query.category);
+    }
+
+    const tabCounts = {
+      all: scopeFiltered.length,
+      top: scopeFiltered.filter((o) =>
+        ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus)
+      ).length,
+      verify_first: scopeFiltered.filter((o) => o.eligibilityStatus === 'unknown').length,
+      ineligible: scopeFiltered.filter((o) => o.eligibilityStatus === 'ineligible').length,
+    };
+
+    let filtered = scopeFiltered;
     if (query.tab === 'top') {
-      filtered = filtered.filter((o) =>
+      filtered = scopeFiltered.filter((o) =>
         ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus)
       );
     } else if (query.tab === 'verify_first') {
-      filtered = filtered.filter((o) => o.eligibilityStatus === 'unknown');
+      filtered = scopeFiltered.filter((o) => o.eligibilityStatus === 'unknown');
     } else if (query.tab === 'ineligible') {
-      filtered = filtered.filter((o) => o.eligibilityStatus === 'ineligible');
-    }
-
-    if (query.openToNigeria === 'true') {
-      filtered = filtered.filter((o) => o.isOpenToNigeria);
-    }
-
-    if (query.category) {
-      filtered = filtered.filter((o) => o.category === query.category);
+      filtered = scopeFiltered.filter((o) => o.eligibilityStatus === 'ineligible');
     }
 
     // Sort by Priority descending
@@ -235,14 +245,7 @@ export class OpportunitiesService {
     return {
       opportunities: filtered,
       total: filtered.length,
-      tabCounts: {
-        all: evaluated.length,
-        top: evaluated.filter((o) =>
-          ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus)
-        ).length,
-        verify_first: evaluated.filter((o) => o.eligibilityStatus === 'unknown').length,
-        ineligible: evaluated.filter((o) => o.eligibilityStatus === 'ineligible').length,
-      },
+      tabCounts,
     };
   }
 

@@ -171,7 +171,7 @@ async function runTestMatrix() {
     const res = await engine.evaluateOpportunity(incompleteProfile, opp);
     const gradCriterion = res.eligibility.criteriaResults.find((c) => c.criterion === 'graduation_year');
     assert.ok(gradCriterion);
-    assert.equal(gradCriterion.result, 'unknown');
+    assert.equal(gradCriterion?.result, 'unknown');
     assert.ok(res.eligibility.missingInfo.some((m) => m.includes('graduation_year')));
   });
 
