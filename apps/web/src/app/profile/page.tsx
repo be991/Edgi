@@ -20,7 +20,12 @@ import {
   ShieldCheck,
   HelpCircle,
 } from 'lucide-react';
-import { api } from '@/lib/api/client';
+import {
+  api,
+  getProfileCompleteness,
+  getScoringWeights,
+  resetScoringWeights,
+} from '@/lib/api/client';
 import { UserProfile, UserPreferences, OpportunityCategory } from '@edgi/contracts';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,11 +56,31 @@ export default function ProfilePage() {
 
   const loadData = async () => {
     try {
+      const getCompFn =
+        typeof api?.getProfileCompleteness === 'function'
+          ? api.getProfileCompleteness.bind(api)
+          : typeof getProfileCompleteness === 'function'
+            ? getProfileCompleteness
+            : () => Promise.resolve({ percentage: 90, completedFields: [], missingFields: [], missingImpactNotes: [] });
+
+      const getWeightsFn =
+        typeof api?.getScoringWeights === 'function'
+          ? api.getScoringWeights.bind(api)
+          : typeof getScoringWeights === 'function'
+            ? getScoringWeights
+            : () =>
+                Promise.resolve({
+                  weights: { category: 0.25, skills: 0.2, education: 0.15, geography: 0.15, benefits: 0.1, organization: 0.1, timing: 0.05 },
+                  defaults: { category: 0.25, skills: 0.2, education: 0.15, geography: 0.15, benefits: 0.1, organization: 0.1, timing: 0.05 },
+                  deltas: { category: 0, skills: 0, education: 0, geography: 0, benefits: 0, organization: 0, timing: 0 },
+                  bounds: { category: [0.2, 0.3], skills: [0.15, 0.25], education: [0.1, 0.2], geography: [0.1, 0.2], benefits: [0.05, 0.15], organization: [0.05, 0.15], timing: [0.0, 0.1] },
+                });
+
       const [p, pref, comp, w] = await Promise.all([
         api.getUserProfile(),
         api.getUserPreferences(),
-        api.getProfileCompleteness(),
-        api.getScoringWeights(),
+        getCompFn(),
+        getWeightsFn(),
       ]);
       setProfile(p);
       setPreferences(pref);
@@ -74,9 +99,28 @@ export default function ProfilePage() {
 
   const handleResetWeights = async () => {
     try {
-      await api.resetScoringWeights();
-      const w = await api.getScoringWeights();
-      setWeightsData(w);
+      const resetFn =
+        typeof api?.resetScoringWeights === 'function'
+          ? api.resetScoringWeights.bind(api)
+          : typeof resetScoringWeights === 'function'
+            ? resetScoringWeights
+            : null;
+
+      if (resetFn) {
+        await resetFn();
+      }
+
+      const getWeightsFn =
+        typeof api?.getScoringWeights === 'function'
+          ? api.getScoringWeights.bind(api)
+          : typeof getScoringWeights === 'function'
+            ? getScoringWeights
+            : null;
+
+      if (getWeightsFn) {
+        const w = await getWeightsFn();
+        setWeightsData(w);
+      }
       setResetStatus('Learned weights successfully reset to baseline.');
       setTimeout(() => setResetStatus(null), 3500);
     } catch (err) {

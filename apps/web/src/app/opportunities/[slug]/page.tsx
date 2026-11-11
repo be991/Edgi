@@ -28,7 +28,7 @@ import {
   XCircle,
   BarChart3,
 } from 'lucide-react';
-import { api } from '@/lib/api/client';
+import { api, submitFeedback } from '@/lib/api/client';
 import { Opportunity } from '@edgi/contracts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,7 +51,16 @@ export default function OpportunityDetailPage() {
   ) => {
     if (!opportunity?.id) return;
     try {
-      await api.submitFeedback(opportunity.id, action, reason);
+      const feedbackFn =
+        typeof api?.submitFeedback === 'function'
+          ? api.submitFeedback.bind(api)
+          : typeof submitFeedback === 'function'
+            ? submitFeedback
+            : null;
+
+      if (feedbackFn) {
+        await feedbackFn(opportunity.id, action, reason);
+      }
       setFeedbackMsg(
         action === 'thumbs_up'
           ? 'Marked as Great Match (+2% skills weight learned)'

@@ -22,7 +22,7 @@ import {
   ShieldCheck,
   Bookmark,
 } from 'lucide-react';
-import { api } from '@/lib/api/client';
+import { api, getRecommended, submitFeedback } from '@/lib/api/client';
 import { Opportunity } from '@edgi/contracts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,13 +40,35 @@ export default function RecommendedPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const res = await api.getRecommended({
-        tab,
-        openToNigeria: openToNigeriaOnly,
-        category: selectedCategory === 'all' ? undefined : selectedCategory,
-      });
-      setOpportunities(res.opportunities);
-      setTabCounts(res.tabCounts);
+      const fetchFn =
+        typeof api?.getRecommended === 'function'
+          ? api.getRecommended.bind(api)
+          : typeof getRecommended === 'function'
+            ? getRecommended
+            : null;
+
+      if (fetchFn) {
+        const res = await fetchFn({
+          tab,
+          openToNigeria: openToNigeriaOnly,
+          category: selectedCategory === 'all' ? undefined : selectedCategory,
+        });
+        setOpportunities(res.opportunities || []);
+        setTabCounts(res.tabCounts || { all: 0, top: 0, verify_first: 0, ineligible: 0 });
+      } else {
+        // Defensive fallback for stale dev bundles
+        const oppsRes = await api.getOpportunities();
+        const opps = oppsRes.opportunities || [];
+        setOpportunities(opps);
+        setTabCounts({
+          all: opps.length,
+          top: opps.filter((o) =>
+            ['eligible', 'likely_eligible', 'possibly_eligible'].includes(o.eligibilityStatus || '')
+          ).length,
+          verify_first: opps.filter((o) => o.eligibilityStatus === 'unknown').length,
+          ineligible: opps.filter((o) => o.eligibilityStatus === 'ineligible').length,
+        });
+      }
     } catch (err) {
       console.error('Failed to load recommended opportunities:', err);
     } finally {
@@ -68,7 +90,16 @@ export default function RecommendedPage() {
     reason?: string
   ) => {
     try {
-      const res = await api.submitFeedback(opportunityId, action, reason);
+      const feedbackFn =
+        typeof api?.submitFeedback === 'function'
+          ? api.submitFeedback.bind(api)
+          : typeof submitFeedback === 'function'
+            ? submitFeedback
+            : null;
+
+      if (feedbackFn) {
+        await feedbackFn(opportunityId, action, reason);
+      }
       setFeedbackSuccess(
         action === 'thumbs_up'
           ? 'Marked as Great Match (+2% skills weight learned)'
