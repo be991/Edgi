@@ -35,7 +35,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         details = obj.details || (Array.isArray(obj.message) ? obj.message : undefined);
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
+      message = process.env.NODE_ENV === 'production' ? 'An unexpected internal error occurred.' : exception.message;
     }
 
     response.status(status).json({

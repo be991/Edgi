@@ -5,8 +5,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
+  const app = await NestFactory.create(AppModule);  
   const port = process.env.PORT || 3001;
   const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
@@ -43,8 +42,8 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(port);
-  console.log(`🚀 Edgi API server running at: http://localhost:${port}/api/v1`);
-  console.log(`📚 OpenAPI Documentation available at: http://localhost:${port}/api/docs`);
+  console.log(`Edgi API server running at: http://localhost:${port}/api/v1`);
+  console.log(`OpenAPI Documentation available at: http://localhost:${port}/api/docs`);
 }
 
 bootstrap();

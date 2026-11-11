@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Send,
   Building,
+  X,
 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +47,12 @@ export default function ProcessingReviewPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [captureResult, setCaptureResult] = useState<any | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -78,9 +85,10 @@ export default function ProcessingReviewPage() {
     try {
       await api.resolveReviewItem(selectedItem.id, action, actionNotes);
       setActionNotes('');
+      showToast(`✅ Successfully processed review item: action "${action}" recorded.`);
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Action failed');
+      showToast(`❌ ${err.message || 'Action failed'}`);
     } finally {
       setIsResolving(false);
     }
@@ -105,6 +113,16 @@ export default function ProcessingReviewPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-3.5 rounded-xl bg-card border border-border/80 shadow-lg text-xs font-semibold flex items-center justify-between text-foreground">
+          <span>{toastMessage}</span>
+          <button onClick={() => setToastMessage(null)} className="text-muted-foreground hover:text-foreground">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner & Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
@@ -280,7 +298,7 @@ export default function ProcessingReviewPage() {
                 <Button
                   size="sm"
                   onClick={() => {
-                    alert('Opportunity saved into canonical database!');
+                    showToast('✅ Opportunity confirmed and saved into canonical index.');
                     setIsCaptureOpen(false);
                     setCaptureResult(null);
                   }}
