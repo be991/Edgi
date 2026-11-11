@@ -100,4 +100,48 @@ export class SourcesController {
   async getSystemSources() {
     return this.sourcesService.getSystemTelemetry();
   }
+
+  // --- Phase 6: Social Connectors & Quick Capture ---
+
+  @Get('connectors')
+  @ApiOperation({ summary: 'List all social and core platform connectors with live status and quotas' })
+  async getConnectors() {
+    return this.sourcesService.listConnectorsSummary();
+  }
+
+  @Post('connectors/:platform/credential')
+  @ApiOperation({ summary: 'Encrypt and configure API key or bot token for a social platform' })
+  async configureCredential(
+    @Param('platform') platform: string,
+    @Body() body: { credentialValue: string }
+  ) {
+    return this.sourcesService.saveConnectorCredential(platform, body.credentialValue);
+  }
+
+  @Post('connectors/:platform/health')
+  @ApiOperation({ summary: 'Run an immediate live health ping on a platform connector' })
+  async testConnectorHealth(@Param('platform') platform: string) {
+    return this.sourcesService.testConnectorHealth(platform);
+  }
+
+  @Post('connectors/:platform/revoke')
+  @ApiOperation({ summary: 'Revoke credentials and wipe stored token for a platform' })
+  async revokeConnector(@Param('platform') platform: string) {
+    return this.sourcesService.revokeConnector(platform);
+  }
+
+  @Post('capture')
+  @ApiOperation({ summary: 'Process a quick capture submission from social share or flyer image' })
+  async processCapture(
+    @Body()
+    body: {
+      platform: string;
+      url?: string;
+      caption?: string;
+      mediaBase64?: string;
+      author?: string;
+    }
+  ) {
+    return this.sourcesService.processCapture(body);
+  }
 }

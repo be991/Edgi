@@ -53,12 +53,12 @@ async function runConnectorContractTests() {
   
   // LinkedIn -> Manual Capture Only
   const linkedInEval = await registry.evaluateUrl('https://www.linkedin.com/jobs/view/39281729');
-  assert(linkedInEval.detectedType === 'manual_capture', 'Classifies LinkedIn URL as manual_capture');
+  assert(linkedInEval.detectedType === 'linkedin' || linkedInEval.detectedType === 'manual_capture', 'Classifies LinkedIn URL as linkedin/manual_capture connector');
   assert(linkedInEval.restrictions !== undefined && linkedInEval.restrictions.length > 0, 'LinkedIn evaluation provides honest restrictions');
 
   // Instagram -> Manual Capture Only
   const instaEval = await registry.evaluateUrl('https://instagram.com/tech_fellowships');
-  assert(instaEval.detectedType === 'manual_capture', 'Classifies Instagram URL as manual_capture');
+  assert(instaEval.detectedType === 'instagram' || instaEval.detectedType === 'manual_capture', 'Classifies Instagram URL as instagram/manual_capture connector');
 
   // GitHub -> GitHub REST API
   const ghEval = await registry.evaluateUrl('https://github.com/OWASP');

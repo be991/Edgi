@@ -61,7 +61,54 @@ export async function runMockApiVerification() {
   }
   console.log(`✅ Application pipeline verified: Created application "${newApp.opportunityTitle}" with ${newApp.checklist.length} checklist tasks.`);
 
-  console.log('🎉 All Mock Data Layer & Nasty Fixture verification tests passed!');
+  // 5. Verify Phase 6 Social Connectors & Quick Capture
+  console.log('\n--- 5. Phase 6 Social Connectors & Capture Tests ---');
+  const socialConnectors = await api.getSocialConnectors();
+  if (socialConnectors.length !== 7) {
+    throw new Error(`Expected 7 social connectors, found ${socialConnectors.length}`);
+  }
+  console.log(`✅ Social Connectors: Retrieved all ${socialConnectors.length} platform adapters.`);
+
+  // Verify cross-platform deduplication via Quick Capture
+  const dedupResult = await api.submitCapture({
+    platform: 'x_twitter',
+    url: 'https://x.com/OpenSSF/status/1928374650',
+    caption: 'Check out our OpenSSF AppSec fellowship! Applications open at https://openssf.org/fellowships/appsec-2027',
+    tags: ['appsec', 'x_twitter'],
+  });
+  if (!dedupResult.isDuplicate || dedupResult.status !== 'duplicate') {
+    throw new Error('Quick Capture deduplication failed: Identical OpenSSF announcement was not merged.');
+  }
+  console.log(`✅ Cross-Platform Deduplication: Merged X announcement into canonical opportunity "${dedupResult.title}".`);
+
+  // Verify new opportunity capture
+  const newCapture = await api.submitCapture({
+    platform: 'instagram',
+    caption: 'Cyber Security Hackathon Lagos 2027. All undergraduates welcome. Prizes: $2000.',
+    mediaBase64: 'data:image/png;base64,mockImageBase64',
+    tags: ['hackathon', 'instagram'],
+  });
+  if (newCapture.isDuplicate || newCapture.status !== 'extracted') {
+    throw new Error('Quick Capture failed to extract new candidate.');
+  }
+  console.log(`✅ Quick Capture Staging: Extracted new opportunity "${newCapture.title}".`);
+
+  // Verify credential configuration and revocation
+  await api.updateConnectorCredential('x_twitter', 'mock-bearer-token-123');
+  let xConn = (await api.getSocialConnectors()).find((c) => c.platform === 'x_twitter');
+  if (!xConn?.credentialConfigured) {
+    throw new Error('Failed to update connector credential.');
+  }
+  console.log('✅ Connector Credential: Configured token for X (Twitter).');
+
+  await api.revokeConnector('x_twitter');
+  xConn = (await api.getSocialConnectors()).find((c) => c.platform === 'x_twitter');
+  if (xConn?.credentialConfigured || xConn?.status !== 'authorization_required') {
+    throw new Error('Failed to revoke connector credential.');
+  }
+  console.log('✅ Connector Revocation: Successfully revoked X token and set status to authorization_required.');
+
+  console.log('\n🎉 All Mock Data Layer, Nasty Fixtures & Phase 6 Social Tests PASSED!');
 }
 
 if (require.main === module) {

@@ -9,3 +9,4 @@ export * from './notification';
 export * from './user';
 export * from './usage';
 export * from './api-responses';
+export * from './capture';

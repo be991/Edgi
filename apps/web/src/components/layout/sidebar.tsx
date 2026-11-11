@@ -17,6 +17,8 @@ import {
   ShieldAlert,
   FolderGit2,
   GitMerge,
+  Share2,
+  UploadCloud,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +26,8 @@ const navItems = [
   { href: '/', label: 'Dashboard', icon: Compass },
   { href: '/discover', label: 'Discover', icon: FolderGit2 },
   { href: '/recommended', label: 'Recommended', icon: Sparkles },
+  { href: '/capture', label: 'Quick Capture', icon: UploadCloud },
+  { href: '/connectors', label: 'Social Connectors', icon: Share2 },
   { href: '/saved', label: 'Saved', icon: Bookmark },
   { href: '/applications', label: 'Application Tracker', icon: Briefcase },
   { href: '/sources', label: 'Sources & Health', icon: Radio },

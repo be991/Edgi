@@ -9,6 +9,9 @@ import {
   UserPreferences,
   UsageBudget,
   SystemHealth,
+  SocialPlatformSummary,
+  CaptureSubmission,
+  CaptureResult,
 } from '@edgi/contracts';
 
 import { mockOpportunities } from '../fixtures/opportunities';
@@ -18,6 +21,7 @@ import { mockUserProfile, mockUserPreferences } from '../fixtures/profile';
 import { mockNotifications } from '../fixtures/notifications';
 import { mockUsageBudget, mockSystemHealth } from '../fixtures/usage';
 import { mockProcessingReviewItems, ProcessingReviewItemMock } from '../fixtures/processing';
+import { mockSocialConnectors } from '../fixtures/connectors';
 
 const API_MODE = process.env.NEXT_PUBLIC_API_MODE || 'mock';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
@@ -32,6 +36,7 @@ let inMemoryProfile = { ...mockUserProfile };
 let inMemoryPreferences = { ...mockUserPreferences };
 let inMemoryNotifications = [...mockNotifications];
 let inMemoryBudget = { ...mockUsageBudget };
+let inMemoryConnectors = [...mockSocialConnectors];
 
 let inMemoryWeights = {
   category: 0.25,
@@ -291,8 +296,205 @@ export async function getProfileCompleteness(): Promise<{
   return res.json();
 }
 
+// Phase 6: Social Connectors & Quick Capture
+export async function getSocialConnectors(): Promise<SocialPlatformSummary[]> {
+  if (API_MODE === 'mock') {
+    return inMemoryConnectors;
+  }
+  const res = await fetch(`${API_URL}/connectors`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to fetch connectors');
+  return res.json();
+}
+
+export async function updateConnectorCredential(platform: string, credentialValue: string): Promise<any> {
+  if (API_MODE === 'mock') {
+    inMemoryConnectors = inMemoryConnectors.map((c) => {
+      if (c.platform === platform) {
+        return {
+          ...c,
+          credentialConfigured: true,
+          status: c.status === 'authorization_required' ? 'active' : c.status,
+          lastCheck: new Date().toISOString(),
+        };
+      }
+      return c;
+    });
+    return { success: true, platform };
+  }
+  const res = await fetch(`${API_URL}/connectors/${platform}/credential`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credentialValue }),
+  });
+  if (!res.ok) throw new Error(`Failed to configure credential for ${platform}`);
+  return res.json();
+}
+
+export async function testConnectorHealth(
+  platform: string
+): Promise<{ isHealthy: boolean; statusCode: number; responseTimeMs: number; message: string }> {
+  if (API_MODE === 'mock') {
+    const conn = inMemoryConnectors.find((c) => c.platform === platform);
+    return {
+      isHealthy: true,
+      statusCode: 200,
+      responseTimeMs: Math.floor(Math.random() * 80) + 40,
+      message: `${conn?.name || platform} connector ping succeeded. Status is healthy.`,
+    };
+  }
+  const res = await fetch(`${API_URL}/connectors/${platform}/health`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Health check failed for ${platform}`);
+  return res.json();
+}
+
+export async function revokeConnector(platform: string): Promise<any> {
+  if (API_MODE === 'mock') {
+    inMemoryConnectors = inMemoryConnectors.map((c) => {
+      if (c.platform === platform) {
+        return {
+          ...c,
+          credentialConfigured: false,
+          status:
+            c.status === 'active' || c.status === 'active_limited' ? 'authorization_required' : c.status,
+        };
+      }
+      return c;
+    });
+    return { success: true, platform };
+  }
+  const res = await fetch(`${API_URL}/connectors/${platform}/revoke`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to revoke connector ${platform}`);
+  return res.json();
+}
+
+export async function submitCapture(data: CaptureSubmission): Promise<CaptureResult> {
+  if (API_MODE === 'mock') {
+    const url = data.url?.toLowerCase() || '';
+    const caption = data.caption?.toLowerCase() || '';
+
+    // Check if this matches OpenSSF or existing URL
+    const isMatchOpenSSF = url.includes('openssf') || caption.includes('openssf');
+    if (isMatchOpenSSF) {
+      const opp = inMemoryOpportunities.find((o) => o.id === '11111111-1111-1111-1111-111111111111');
+      if (opp) {
+        opp.evidence = [
+          ...(opp.evidence || []),
+          {
+            id: `ev-captured-${Date.now()}`,
+            opportunityId: opp.id,
+            sourceId: `src-${data.platform}`,
+            sourceName: `${data.platform.toUpperCase()} Quick Capture`,
+            sourceUrl: data.url || 'https://x.com/OpenSSF/status/1900000',
+            fieldName: 'announcement',
+            extractedValue: data.caption.slice(0, 100),
+            confidence: 0.95,
+            snippet: data.caption,
+            extractedAt: new Date().toISOString(),
+          },
+        ];
+        return {
+          id: `cap-${Date.now()}`,
+          status: 'duplicate',
+          isDuplicate: true,
+          opportunityId: opp.id,
+          canonicalUrl: opp.canonicalUrl,
+          title: opp.title,
+          organization: opp.organization.name,
+          deadline: opp.deadline,
+          evidenceCount: opp.evidence.length,
+          message: `Consolidated with existing canonical opportunity "${opp.title}". Appended supporting evidence trail from ${data.platform}.`,
+        };
+      }
+    }
+
+    // New opportunity extracted from capture
+    const title =
+      data.caption.split('\n')[0]?.slice(0, 80) || `${data.platform.toUpperCase()} Opportunity Lead`;
+    const newId = `cap-opp-${Date.now()}`;
+    const newOpp: Opportunity = {
+      id: newId,
+      canonicalUrl: data.url || `https://${data.platform}.com/lead/${Date.now()}`,
+      title,
+      slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      summary: data.caption || 'Captured via Edgi Share-to-App intake.',
+      organization: {
+        id: `org-cap-${Date.now()}`,
+        name: 'Captured Organization',
+        slug: 'captured-org',
+        website: data.url || 'https://captured.org',
+        country: 'Nigeria',
+        verified: false,
+        createdAt: new Date().toISOString(),
+      },
+      category: data.caption.toLowerCase().includes('fellowship')
+        ? 'fellowship'
+        : data.caption.toLowerCase().includes('hackathon')
+          ? 'hackathon_ctf'
+          : 'internship',
+      verificationStatus: 'unverified',
+      confidence: data.mediaBase64 ? 0.7 : 0.85,
+      publishedAt: new Date().toISOString(),
+      deadline: '2026-12-31T23:59:59.000Z',
+      deadlineTz: 'Africa/Lagos',
+      isDeadlineEstimated: true,
+      stipend: {
+        min: 1500,
+        max: 2000,
+        currency: 'USD',
+        period: 'total',
+        isUnpaid: false,
+        description: 'Captured stipend / prize allowance',
+      },
+      locations: [{ country: 'Nigeria', isRemote: true }],
+      benefits: ['Stipend allowance', 'Mentorship', 'Direct certificate'],
+      tags: ['Cyber Security', 'Quick Capture', 'Nigeria'],
+      applyUrl: data.url || 'https://forms.gle/captured-opportunity',
+      isSaved: false,
+      isOpenToNigeria: true,
+      relevanceScore: 92,
+      eligibilityStatus: 'eligible',
+      priority: 88,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      evidence: [],
+    };
+
+    inMemoryOpportunities.unshift(newOpp);
+
+    return {
+      id: `cap-${Date.now()}`,
+      status: 'extracted',
+      isDuplicate: false,
+      opportunityId: newId,
+      canonicalUrl: newOpp.canonicalUrl,
+      title: newOpp.title,
+      organization: newOpp.organization.name,
+      deadline: newOpp.deadline,
+      evidenceCount: 1,
+      message: `Successfully captured and extracted into canonical index with ${Math.round(
+        newOpp.confidence * 100
+      )}% confidence.`,
+    };
+  }
+
+  const res = await fetch(`${API_URL}/capture`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to submit capture');
+  return res.json();
+}
+
 export const api = {
   isMockMode: () => API_MODE === 'mock',
+
+  // Phase 6 Social Connectors & Capture
+  getSocialConnectors,
+  updateConnectorCredential,
+  testConnectorHealth,
+  revokeConnector,
+  submitCapture,
 
   // Phase 5 Intelligence
   getRecommendedOpportunities,

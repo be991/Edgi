@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/__tests__/connectors-contract.test.ts"
+    "test": "tsx src/__tests__/connectors-contract.test.ts && tsx src/__tests__/social-connectors.test.ts"
   },
   "dependencies": {
     "@edgi/contracts": "workspace:*",

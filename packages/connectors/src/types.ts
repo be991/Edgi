@@ -53,7 +53,18 @@ export interface SourceHealth {
 
 export interface SourceEvaluationResult {
   url: string;
-  detectedType: 'website' | 'rss_feed' | 'github' | 'manual_capture';
+  detectedType:
+    | 'website'
+    | 'rss_feed'
+    | 'github'
+    | 'youtube'
+    | 'reddit'
+    | 'telegram'
+    | 'discord'
+    | 'x_twitter'
+    | 'instagram'
+    | 'linkedin'
+    | 'manual_capture';
   proposedMethod: string;
   name: string;
   capabilities: SourceCapabilities;
