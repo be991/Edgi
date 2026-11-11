@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
@@ -8,6 +9,22 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);  
   const port = process.env.PORT || 3001;
   const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+
+  // Security Headers via Helmet
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'", corsOrigin],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   // Global API Prefix
   app.setGlobalPrefix('api/v1');

@@ -29,6 +29,8 @@ pnpm-debug.log*
 # Database & local data
 *.db
 *.sqlite
+*.sql
+backups/
 postgres_data/
 redis_data/
 

@@ -21,6 +21,7 @@ import {
   UploadCloud,
   Bell,
   FileText,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,7 @@ const navItems = [
   { href: '/applications', label: 'Application Pipeline', icon: Briefcase },
   { href: '/documents', label: 'Documents Vault', icon: FileText },
   { href: '/notifications', label: 'Notifications Hub', icon: Bell },
+  { href: '/operations', label: 'Operations & DLQ', icon: Activity },
   { href: '/sources', label: 'Sources & Health', icon: Radio },
   { href: '/sources/candidates', label: 'Candidate Approvals', icon: FileCheck2 },
   { href: '/processing', label: 'Processing Queue', icon: GitMerge },

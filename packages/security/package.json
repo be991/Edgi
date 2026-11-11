@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/__tests__/safe-fetch.test.ts"
+    "test": "tsx src/__tests__/safe-fetch.test.ts && tsx src/__tests__/hardening.test.ts"
   },
   "dependencies": {
     "ipaddr.js": "^2.2.0"

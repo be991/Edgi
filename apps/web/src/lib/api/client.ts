@@ -48,7 +48,7 @@ let inMemoryPreferences = { ...mockUserPreferences };
 let inMemoryNotifications = [...mockNotifications];
 let inMemoryNotificationPreferences = { ...mockNotificationPreferences };
 let inMemoryDeliveries = [...mockNotificationDeliveries];
-let inMemoryBudget = { ...mockUsageBudget };
+let inMemoryBudget: any = { ...mockUsageBudget, isEmergencyPaused: false };
 let inMemoryConnectors = [...mockSocialConnectors];
 
 let inMemoryWeights = {
@@ -1556,6 +1556,238 @@ export const api = {
     }
     const res = await fetch(`${API_URL}/opportunities/${id}/history`, { cache: 'no-store' });
     if (!res.ok) return [];
+    return res.json();
+  },
+
+  // 9. Phase 8: Hardening, Operations, Audit & Privacy
+  async getOperationsSummary(): Promise<any> {
+    if (API_MODE === 'mock') {
+      return {
+        queues: {
+          discoveryQueue: { waiting: 0, active: 1, failed: 1, delayed: 0 },
+          processingQueue: { waiting: 0, active: 0, failed: 0, delayed: 0 },
+          notificationQueue: { waiting: 0, active: 0, failed: 0, delayed: 0 },
+        },
+        deadLetterJobs: [
+          {
+            id: 'job-dlq-101',
+            queueName: 'discovery-queue',
+            name: 'poll-source-rss',
+            failedReason: 'Upstream HTTP 504 Gateway Timeout while parsing https://threatpost.com/feed',
+            timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+            attemptsMade: 3,
+            data: { sourceId: 'src-threatpost', url: 'https://threatpost.com/feed' },
+          },
+        ],
+        discoveryHeartbeat: [
+          {
+            pipeline: 'rss_feed',
+            sourceName: 'OpenSSF Announcements & Bounties',
+            lastSuccessfulRun: new Date().toISOString(),
+            status: 'healthy',
+            itemsDiscovered: 42,
+            latencyMs: 310,
+          },
+          {
+            pipeline: 'youtube_channel',
+            sourceName: 'LiveOverflow AppSec & CTF',
+            lastSuccessfulRun: new Date(Date.now() - 2 * 3600000).toISOString(),
+            status: 'healthy',
+            itemsDiscovered: 15,
+            latencyMs: 420,
+          },
+          {
+            pipeline: 'reddit_community',
+            sourceName: 'r/netsec Announcements',
+            lastSuccessfulRun: new Date(Date.now() - 12 * 3600000).toISOString(),
+            status: 'healthy',
+            itemsDiscovered: 28,
+            latencyMs: 380,
+          },
+        ],
+        emailDeliveryStats: {
+          totalSent: 12,
+          delivered: 12,
+          failed: 0,
+          pending: 0,
+          successRatePercent: 100.0,
+          averageRetries: 1.0,
+        },
+        errorRatePercent: 0.0,
+        budget: { ...inMemoryBudget },
+        retentionPolicies: {
+          rawContentDays: 30,
+          logsDays: 90,
+          auditDays: 180,
+        },
+      };
+    }
+    const res = await fetch(`${API_URL}/system/operations`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch operations summary');
+    return res.json();
+  },
+
+  async retryDeadLetterJob(jobId: string): Promise<any> {
+    if (API_MODE === 'mock') {
+      return { success: true, message: `Job ${jobId} successfully resubmitted to queue.` };
+    }
+    const res = await fetch(`${API_URL}/system/operations/retry-job`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    });
+    if (!res.ok) throw new Error('Failed to retry dead-letter job');
+    return res.json();
+  },
+
+  async discardDeadLetterJob(jobId: string): Promise<any> {
+    if (API_MODE === 'mock') {
+      return { success: true, message: `Job ${jobId} permanently purged.` };
+    }
+    const res = await fetch(`${API_URL}/system/operations/discard-job`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId }),
+    });
+    if (!res.ok) throw new Error('Failed to discard dead-letter job');
+    return res.json();
+  },
+
+  async getAuditLogs(params?: { limit?: number; offset?: number; entityType?: string; action?: string }): Promise<any> {
+    if (API_MODE === 'mock') {
+      return {
+        logs: [
+          {
+            id: 'audit-1',
+            action: 'APPLICATION_STATUS_UPDATED',
+            entityType: 'Application',
+            entityId: 'app-africa-fellowship-2026',
+            diff: { from: 'saved', to: 'applied' },
+            ipAddress: '127.0.0.1',
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 'audit-2',
+            action: 'NOTIFICATION_PREFERENCES_SAVED',
+            entityType: 'NotificationPreference',
+            entityId: 'global',
+            diff: { highPriorityThreshold: 85 },
+            ipAddress: '127.0.0.1',
+            createdAt: new Date(Date.now() - 3600000).toISOString(),
+          },
+        ],
+        total: 2,
+      };
+    }
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    if (params?.entityType) query.set('entityType', params.entityType);
+    if (params?.action) query.set('action', params.action);
+
+    const res = await fetch(`${API_URL}/system/audit-logs?${query.toString()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch audit logs');
+    return res.json();
+  },
+
+  async getQualityReport(): Promise<any> {
+    if (API_MODE === 'mock') {
+      return {
+        period: {
+          start: new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString(),
+          end: new Date().toISOString(),
+        },
+        metrics: {
+          opportunitiesFound: 24,
+          verifiedCount: 22,
+          verifiedRatePercent: 91.7,
+          duplicatesCaught: 6,
+          brokenLinkRatePercent: 0.0,
+          deadlineAccuracyPercent: 87.5,
+          eligibilityEvaluatedPercent: 100.0,
+          savedAppliedConversionPercent: 33.3,
+        },
+        sourceRoi: [
+          {
+            sourceName: 'OpenSSF Announcements & Bounties',
+            connectorType: 'rss_feed',
+            totalDiscovered: 42,
+            verifiedCount: 38,
+            conversionPercent: 90.5,
+            healthStatus: 'healthy',
+          },
+          {
+            sourceName: 'LiveOverflow AppSec & CTF',
+            connectorType: 'youtube_channel',
+            totalDiscovered: 15,
+            verifiedCount: 12,
+            conversionPercent: 80.0,
+            healthStatus: 'healthy',
+          },
+        ],
+        categoryDistribution: {
+          fellowship: 8,
+          hackathon_ctf: 6,
+          dev_programme: 5,
+          internship: 3,
+          oss_bounty: 2,
+        },
+      };
+    }
+    const res = await fetch(`${API_URL}/system/quality-report`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch quality report');
+    return res.json();
+  },
+
+  async toggleEmergencyPause(isPaused: boolean): Promise<any> {
+    if (API_MODE === 'mock') {
+      inMemoryBudget = { ...inMemoryBudget, isEmergencyPaused: isPaused };
+      return { success: true, isEmergencyPaused: isPaused };
+    }
+    const res = await fetch(`${API_URL}/system/emergency-pause`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPaused }),
+    });
+    if (!res.ok) throw new Error('Failed to update emergency pause state');
+    return res.json();
+  },
+
+  async exportUserData(): Promise<any> {
+    if (API_MODE === 'mock') {
+      return {
+        exportedAt: new Date().toISOString(),
+        platform: 'Edgi Opportunity Intelligence Platform',
+        profile: inMemoryProfile,
+        preferences: inMemoryPreferences,
+        applications: inMemoryApplications,
+        documents: inMemoryDocuments,
+      };
+    }
+    const res = await fetch(`${API_URL}/users/me/export`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to export user data');
+    return res.json();
+  },
+
+  async deleteUserData(): Promise<any> {
+    if (API_MODE === 'mock') {
+      return { success: true, message: 'All personal data has been permanently purged.' };
+    }
+    const res = await fetch(`${API_URL}/users/me/data`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete user data');
+    return res.json();
+  },
+
+  async updateRetentionPolicies(policies: { rawContentDays?: number; logsDays?: number; auditDays?: number }): Promise<any> {
+    if (API_MODE === 'mock') {
+      return { success: true, retentionPolicies: policies };
+    }
+    const res = await fetch(`${API_URL}/system/retention`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(policies),
+    });
+    if (!res.ok) throw new Error('Failed to update retention policies');
     return res.json();
   },
 };
