@@ -11,7 +11,7 @@ import {
 } from '../index';
 
 async function runTests() {
-  console.log('🛡️  Running @edgi/security SSRF & SafeFetch Verification Tests...\n');
+  console.log('Running @edgi/security SSRF & SafeFetch Verification Tests...\n');
 
   let passed = 0;
   let total = 0;
@@ -19,10 +19,10 @@ async function runTests() {
   function assert(condition: boolean, testName: string) {
     total++;
     if (!condition) {
-      console.error(`❌ FAILED: ${testName}`);
+      console.error(`FAILED: ${testName}`);
       process.exit(1);
     }
-    console.log(`✅ PASSED: ${testName}`);
+    console.log(`PASSED: ${testName}`);
     passed++;
   }
 

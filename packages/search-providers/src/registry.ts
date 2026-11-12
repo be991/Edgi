@@ -1,6 +1,7 @@
 import { SearchInput, SearchProvider, SearchResult } from './types';
 import { MockSearchProvider } from './providers/mock-provider';
 import { BraveSearchProvider } from './providers/brave-provider';
+import { SerperSearchProvider } from './providers/serper-provider';
 
 export class SearchProviderRegistry {
   private static instance: SearchProviderRegistry;
@@ -10,9 +11,11 @@ export class SearchProviderRegistry {
   private constructor() {
     this.register(new MockSearchProvider());
     this.register(new BraveSearchProvider());
+    this.register(new SerperSearchProvider());
 
-    // If BRAVE_SEARCH_API_KEY is configured in environment, prefer brave_search
-    if (process.env.BRAVE_SEARCH_API_KEY) {
+    if (process.env.SEARCH_PROVIDER === 'serper' || process.env.SERPER_API_KEY) {
+      this.primaryProviderName = 'serper';
+    } else if (process.env.BRAVE_SEARCH_API_KEY) {
       this.primaryProviderName = 'brave_search';
     }
   }

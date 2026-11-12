@@ -82,7 +82,7 @@ export class EmailService {
 
     // 3. Dispatch to Resend (or Mock Transport in Development/Test)
     const apiKey = process.env.RESEND_API_KEY;
-    const fromAddress = options.from || process.env.RESEND_FROM_EMAIL || 'Edgi Alerts <alerts@edgi.local>';
+    const fromAddress = options.from || process.env.RESEND_FROM_EMAIL || 'Edgi Alerts <onboarding@resend.dev>';
 
     try {
       let providerId: string;
