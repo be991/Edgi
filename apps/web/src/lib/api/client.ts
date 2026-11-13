@@ -1077,7 +1077,14 @@ export const api = {
     }
     const res = await fetch(`${API_URL}/notifications`);
     if (!res.ok) throw new Error('Failed to fetch notifications');
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && Array.isArray(data.items)) {
+      return data.items;
+    }
+    return [];
   },
 
   async markNotificationAsRead(id: string): Promise<void> {
@@ -1357,7 +1364,12 @@ export const api = {
     }
     const res = await fetch(`${API_URL}/discovery/queries?limit=${limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch query preview');
-    return res.json();
+    const data = await res.json();
+    return {
+      queries: Array.isArray(data?.queries) ? data.queries : Array.isArray(data) ? data : [],
+      total: data?.totalCount ?? data?.total ?? (Array.isArray(data?.queries) ? data.queries.length : 0),
+      dimensions: data?.dimensions || {},
+    };
   },
 
   async getDiscoveryHistory(limit = 20): Promise<any[]> {
@@ -1376,7 +1388,8 @@ export const api = {
     }
     const res = await fetch(`${API_URL}/discovery/history?limit=${limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch discovery history');
-    return res.json();
+    const data = await res.json();
+    return Array.isArray(data) ? data : data?.runs || [];
   },
 
   async getLeads(status?: string): Promise<{ leads: any[]; total: number }> {
@@ -1410,7 +1423,14 @@ export const api = {
     const query = status ? `?status=${status}` : '';
     const res = await fetch(`${API_URL}/leads${query}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch leads');
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return { leads: data, total: data.length };
+    }
+    return {
+      leads: Array.isArray(data?.leads) ? data.leads : [],
+      total: data?.total ?? (Array.isArray(data?.leads) ? data.leads.length : 0),
+    };
   },
 
   async processLead(id: string): Promise<any> {
@@ -1503,7 +1523,11 @@ export const api = {
     const query = status ? `?status=${status}` : '';
     const res = await fetch(`${API_URL}/processing/review${query}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch processing review items');
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return { items: data, total: data.length };
+    }
+    return { items: data?.items || [], total: data?.total ?? (data?.items?.length || 0) };
   },
 
   async resolveReviewItem(id: string, action: 'accept' | 'merge' | 'reject', notes?: string): Promise<any> {

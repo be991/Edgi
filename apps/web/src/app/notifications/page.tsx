@@ -51,9 +51,9 @@ export default function NotificationsPage() {
         api.getNotificationPreferences(),
         api.getNotificationDeliveries(),
       ]);
-      setNotifications(notifs);
+      setNotifications(Array.isArray(notifs) ? notifs : (notifs as any)?.items || []);
       setPreferences(prefs);
-      setDeliveries(dels);
+      setDeliveries(Array.isArray(dels) ? dels : (dels as any)?.deliveries || []);
     } finally {
       setIsLoading(false);
     }
@@ -120,8 +120,9 @@ export default function NotificationsPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const filteredNotifications = notifications.filter((n) => {
+  const notifList = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = notifList.filter((n) => !n.read).length;
+  const filteredNotifications = notifList.filter((n) => {
     if (selectedType === 'all') return true;
     if (selectedType === 'unread') return !n.read;
     return n.type === selectedType;

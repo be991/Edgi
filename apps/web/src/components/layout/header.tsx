@@ -29,7 +29,18 @@ export function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderProps) {
     }
 
     // Load initial notifications
-    api.getNotifications().then(setNotifications);
+    api
+      .getNotifications()
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setNotifications(data);
+        } else if (data && Array.isArray((data as any).items)) {
+          setNotifications((data as any).items);
+        } else {
+          setNotifications([]);
+        }
+      })
+      .catch(() => setNotifications([]));
   }, []);
 
   const toggleTheme = () => {
@@ -39,12 +50,13 @@ export function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderProps) {
     }
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const notificationList = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = notificationList.filter((n) => !n.read).length;
 
   const handleMarkAsRead = async (id: string) => {
     await api.markNotificationAsRead(id);
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      Array.isArray(prev) ? prev.map((n) => (n.id === id ? { ...n, read: true } : n)) : [],
     );
   };
 
@@ -108,10 +120,10 @@ export function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderProps) {
               </div>
 
               <div className="divide-y divide-border/50 max-h-80 overflow-y-auto mt-2">
-                {notifications.length === 0 ? (
+                {notificationList.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-4 text-center">No notifications</p>
                 ) : (
-                  notifications.map((notif) => (
+                  notificationList.map((notif) => (
                     <div
                       key={notif.id}
                       className={`py-3 text-xs flex gap-2.5 ${notif.read ? 'opacity-70' : 'font-medium'}`}
