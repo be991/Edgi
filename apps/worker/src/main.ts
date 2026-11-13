@@ -1,3 +1,22 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Load environment files before any module initialization
+const envCandidates = [
+  path.resolve(__dirname, '../.env.local'),
+  path.resolve(__dirname, '../../.env.local'),
+  path.resolve(__dirname, '../../../.env.local'),
+  path.resolve(process.cwd(), '.env.local'),
+  path.resolve(process.cwd(), '.env'),
+];
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath) && typeof (process as any).loadEnvFile === 'function') {
+    try {
+      (process as any).loadEnvFile(envPath);
+    } catch {}
+  }
+}
+
 import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '@edgi/database';

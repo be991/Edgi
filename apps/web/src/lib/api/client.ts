@@ -33,7 +33,7 @@ import { mockUsageBudget, mockSystemHealth } from '../fixtures/usage';
 import { mockProcessingReviewItems, ProcessingReviewItemMock } from '../fixtures/processing';
 import { mockSocialConnectors } from '../fixtures/connectors';
 
-const API_MODE = process.env.NEXT_PUBLIC_API_MODE || 'mock';
+const API_MODE = process.env.NEXT_PUBLIC_API_MODE || 'real';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 // In-memory mock state for interactive demo persistence

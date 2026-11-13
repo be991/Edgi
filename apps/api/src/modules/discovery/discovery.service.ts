@@ -75,11 +75,17 @@ export class DiscoveryService {
 
     const runStartTime = new Date();
 
+    const registry = SearchProviderRegistry.getInstance();
+    if (dto.provider) {
+      registry.setPrimaryProvider(dto.provider);
+    }
+    const activeProviderName = registry.getActiveProvider().name;
+
     // 3. If Budget Paused or Hard-Stop reached
     if (budgetStatus.isPaused) {
       const pausedRun = await this.prisma.discoveryRun.create({
         data: {
-          provider: dto.provider || 'mock_search',
+          provider: activeProviderName,
           status: 'paused_budget',
           queriesExecuted: 0,
           leadsFound: 0,
@@ -107,17 +113,12 @@ export class DiscoveryService {
     // 4. Create running discovery run record
     const discoveryRun = await this.prisma.discoveryRun.create({
       data: {
-        provider: dto.provider || 'mock_search',
+        provider: activeProviderName,
         status: 'running',
         querySummary: queries as any,
         startedAt: runStartTime,
       },
     });
-
-    const registry = SearchProviderRegistry.getInstance();
-    if (dto.provider) {
-      registry.setPrimaryProvider(dto.provider);
-    }
 
     let queriesExecuted = 0;
     let leadsFound = 0;
