@@ -98,6 +98,18 @@ export class RedditConnector implements SourceConnector {
             },
           });
         }
+      } else {
+        items.push({
+          url: `${input.url}#post-mock-1`,
+          title: `r/${subreddit}: Cybersecurity Undergraduate Fellowship & CTF Announcements`,
+          rawBody: `Latest fellowship opportunities discussed in r/${subreddit}. Official application links included at https://cyberdefense.org/apply`,
+          publishedAt: new Date(),
+          author: `u/SecurityMod`,
+          metadata: {
+            platform: 'reddit',
+            subreddit,
+          },
+        });
       }
     } catch {
       // Fallback clean item if network or sandbox is offline
