@@ -166,14 +166,25 @@ export async function safeFetch(
         {
           protocol: parsedUrl.protocol,
           hostname: parsedUrl.hostname,
+          servername: isHttps ? parsedUrl.hostname : undefined,
           port: parsedUrl.port || (isHttps ? 443 : 80),
           path: `${parsedUrl.pathname}${parsedUrl.search}`,
           method,
           headers: requestHeaders,
           // Custom DNS lookup that returns the pre-validated safe IP
-          lookup: (_hostname, _opts, callback) => {
+          lookup: (_hostname: string, options: any, callback: any) => {
+            let cb = callback;
+            let opts = options;
+            if (typeof options === 'function') {
+              cb = options;
+              opts = {};
+            }
             const family = pinnedIp.includes(':') ? 6 : 4;
-            callback(null, pinnedIp, family);
+            if (opts && opts.all) {
+              cb(null, [{ address: pinnedIp, family }]);
+            } else {
+              cb(null, pinnedIp, family);
+            }
           },
           timeout: timeoutMs,
         },
