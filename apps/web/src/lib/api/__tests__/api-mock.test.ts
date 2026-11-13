@@ -1,6 +1,7 @@
-import { api } from '../client';
+process.env.NEXT_PUBLIC_API_MODE = 'mock';
 
 export async function runMockApiVerification() {
+  const { api } = await import('../client');
   console.log('🧪 Running Mock API & Data Layer Tests...');
 
   // 1. Verify getOpportunities and nasty fixtures
